@@ -4,10 +4,10 @@ Starta med:  streamlit run app.py
 """
 import streamlit as st
 
-st.set_page_config(page_title="Aktiescreen", page_icon="📈", layout="wide",
+st.set_page_config(page_title="Aktiescreen", page_icon="🎄", layout="wide",
                    initial_sidebar_state="expanded")
 
-from ui import inject_css  # noqa: E402
+from ui import JULTEMA, christmas_greeting, inject_christmas, inject_css  # noqa: E402
 import sida_analys as stock_analysis  # noqa: E402
 import sida_oversikt as overview  # noqa: E402
 import sida_screener as screener_page  # noqa: E402
@@ -31,10 +31,15 @@ nav = st.navigation({
 })
 
 with st.sidebar:
-    st.markdown("### 📈 Aktiescreen")
+    st.markdown("### 🎄 Aktiescreen" if JULTEMA else "### 📈 Aktiescreen")
+    christmas_greeting()
     if st.button("🔄 Uppdatera kurser", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
+    if JULTEMA:
+        st.toggle("❄️ Snöfall", value=True, key="snow")
     st.caption("Kurser via Yahoo Finance (kan vara ~15 min fördröjda). Data lagras lokalt i data/portfolio.db.")
+
+inject_christmas(snow=st.session_state.get("snow", True))
 
 nav.run()

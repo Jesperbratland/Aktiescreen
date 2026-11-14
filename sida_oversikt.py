@@ -147,7 +147,7 @@ def _history_section(tx: pd.DataFrame):
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=hist.index, y=hist["value"], name="Marknadsvärde",
                                  line=dict(color=ACCENT, width=2), fill="tozeroy",
-                                 fillcolor="rgba(59,130,246,0.12)"))
+                                 fillcolor="rgba(232,180,76,0.12)"))
         fig.add_trace(go.Scatter(x=hist.index, y=hist["invested"], name="Nettoinsatt",
                                  line=dict(color="#94A3B8", dash="dash")))
         fig.update_layout(height=380, hovermode="x unified", margin=dict(t=10, b=10),

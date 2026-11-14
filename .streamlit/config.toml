@@ -1,0 +1,13 @@
+# 🎄 Jultema – vinternatt med guldaccenter.
+# Vill du byta tillbaka efter jul: sätt JULTEMA = False i ui.py och
+# ändra primaryColor till "#3B82F6" och bakgrunderna till "#0B1220" / "#131C2E".
+[theme]
+base = "dark"
+primaryColor = "#E8B44C"
+backgroundColor = "#0C1A17"
+secondaryBackgroundColor = "#142721"
+textColor = "#F4EFE6"
+font = "sans serif"
+
+[server]
+headless = true
