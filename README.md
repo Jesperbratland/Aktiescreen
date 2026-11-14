@@ -17,7 +17,7 @@ Appen öppnas på http://localhost:8501. Klicka **Ladda exempelportfölj** på �
 
 | Sida | Innehåll |
 |---|---|
-| **🐺 Fråga Vargen** | Aktieexpert (påhittad mäklarkaraktär) som ser din portfölj. **Grundläge** helt gratis utan nyckel (regelbaserade analyser). **AI-läge** gratis via Groq: lägg `GROQ_API_KEY` i Streamlit Secrets (och gärna `APP_PASSWORD`). |
+| **🐺 Fråga Vargen** | Aktieexpert (påhittad mäklarkaraktär) som ser din portfölj. **Grundläge** helt gratis utan nyckel (regelbaserade analyser). **AI-läge** gratis via Groq: lägg `GROQ_API_KEY` i Streamlit Secrets . |
 | **Översikt** | Marknadsvärde, dagens förändring, orealiserat/realiserat resultat, utdelningar. Fördelning per innehav/valuta/sektor. Värde vs insatt kapital. Tidsviktad avkastning (TWR) mot OMXS30, S&P 500 m.fl. |
 | **Mitt innehav** | **Importera alla affärer från Avanza** (CSV-export) med exakt GAV, courtage och valutakurser. Lägg till aktier genom att skriva bolagsnamnet – ticker och valuta hittas automatiskt. Lista över dina aktier per konto med ta bort-knapp. **Pengar för köp** per konto (sätt in, ta ut, ange saldo) som uppdateras automatiskt vid köp, sälj och utdelning. Konton (ISK, KF, AF), mäklare och courtageklass. |
 | **Skatt & avgifter** | Uppskattad ISK/KF-schablonskatt (kvartalsvärden, 300 000 kr fribelopp 2026), skatt på vinster/utdelningar på AF med K4-underlag, courtage och valutaväxling, tips om courtageklass samt jämförelse ISK vs AF. |
@@ -28,7 +28,7 @@ Appen öppnas på http://localhost:8501. Klicka **Ladda exempelportfölj** på �
 
 ## Inloggning
 
-Appen kan låsas med en engångskod (4 siffror som standard) som mejlas till ägaren. Lägg in `AUTH_EMAIL`, `SMTP_USER` och `SMTP_PASSWORD` (Gmail-app-lösenord) i Streamlit Secrets. Max 3 försök per kod, max 5 koder per timme och låsning i 24 timmar efter 8 felaktiga försök. Se `auth.py`.
+Sätt `APP_PASSWORD` i Streamlit Secrets så måste lösenordet skrivas in varje gång hemsidan öppnas. 5 fel inom 15 minuter ger en paus, 20 fel inom ett dygn låser i 24 timmar (Reboot app låser upp). Se `auth.py`.
 
 ## Kurser
 

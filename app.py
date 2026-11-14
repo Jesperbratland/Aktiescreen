@@ -21,7 +21,7 @@ import sida_transaktioner as transactions  # noqa: E402
 
 inject_css()
 inject_christmas(snow=st.session_state.get("snow", True))
-auth.require_login()  # stoppar här tills rätt kod har angetts
+auth.require_login()  # stoppar här tills rätt lösenord har angetts
 
 pages = {
     "oversikt": st.Page(overview.render, title="Översikt", icon="📊", url_path="oversikt", default=True),

@@ -28,17 +28,6 @@ def render():
     st.caption("Din aktieexpert – en påhittad mäklarkaraktär. Han ser dina innehav och hämtar aktuella kurser "
                "och nyckeltal. Inte finansiell rådgivning – du fattar besluten.")
 
-    # Lösenordsskydd (rekommenderas eftersom hemsidan är publik och varje fråga kostar API-pengar)
-    pw = _secret("APP_PASSWORD")
-    if pw and not st.session_state.get("vargen_ok"):
-        entered = st.text_input("Lösenord", type="password")
-        if entered and entered == pw:
-            st.session_state["vargen_ok"] = True
-            st.rerun()
-        elif entered:
-            st.error("Fel lösenord.")
-        return
-
     groq_key = _secret("GROQ_API_KEY") or st.session_state.get("groq_key")
     claude_key = _secret("ANTHROPIC_API_KEY")
     if groq_key:
@@ -121,9 +110,7 @@ Vargen kan drivas av en gratis AI-tjänst som heter **Groq**. Den är gratis upp
 4. Klistra in följande och klicka **Save**:
 ```toml
 GROQ_API_KEY = "gsk_din-nyckel-här"
-APP_PASSWORD = "välj-ett-lösenord"
 ```
-Lösenordet är valfritt men smart – annars kan vem som helst med länken använda din gratiskvot.
             """
         )
         key = st.text_input("…eller testa direkt (sparas bara tills du stänger sidan)", type="password",
