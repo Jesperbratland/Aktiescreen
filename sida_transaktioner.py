@@ -200,7 +200,7 @@ def _import_export():
             if b"Datum" in head and b"Antal" in head and b"Kurs" in head:
                 st.warning("Det här är en fil från **Avanza** – använd importen som är gjord för den, "
                            "så blir GAV, courtage och konton rätt.")
-                st.page_link(st.session_state["_pages"]["konton"], label="📥 Gå till Mitt innehav → Importera från Avanza")
+                st.page_link(st.session_state["_pages"]["konton"], label="📥 Gå till Mitt innehav → Lägg till aktie → Importera från Avanza")
                 return
         mode = st.radio("Läge", ["Lägg till", "Ersätt allt"], horizontal=True)
         if up is not None and st.button("Importera"):

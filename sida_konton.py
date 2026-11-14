@@ -20,19 +20,23 @@ def render():
     if msg := st.session_state.pop("flash_konton", None):
         st.success(msg)
 
-    tab0, tab1, tab2, tabc, tab3 = st.tabs(["📥 Importera från Avanza", "➕ Lägg till aktie", "📋 Mina aktier",
-                                            "💰 Pengar för köp", "🏦 Mina konton"])
-    with tabc:
-        _cash()
-    with tab0:
-        _avanza_import()
-    with tab1:
-        _quick_add()
-        with st.expander("📑 Har du många aktier? Lägg till flera på en gång i en tabell"):
-            _holdings()
-    with tab2:
+    tab_my, tab_add, tab_cash, tab_acc = st.tabs(["📋 Mina aktier", "➕ Lägg till aktie", "💰 Pengar för köp",
+                                                  "🏦 Mina konton"])
+    with tab_my:
         _my_stocks()
-    with tab3:
+    with tab_add:
+        modes = ["➕ En aktie i taget", "📥 Importera från Avanza", "📑 Flera på en gång (tabell)"]
+        mode = st.segmented_control("Sätt att lägga till", modes, default=modes[0], key="add_mode",
+                                    label_visibility="collapsed") or modes[0]
+        if mode == modes[1]:
+            _avanza_import()
+        elif mode == modes[2]:
+            _holdings()
+        else:
+            _quick_add()
+    with tab_cash:
+        _cash()
+    with tab_acc:
         _accounts()
 
 
@@ -143,7 +147,7 @@ def _quick_add():
 def _my_stocks():
     tx = db.load_transactions()
     if tx.empty:
-        st.info("Inga aktier inlagda än. Lägg till under **➕ Lägg till aktie**.")
+        st.info("Inga aktier inlagda än. Klicka på fliken **➕ Lägg till aktie** ovanför.")
         return
     pos = portfolio.compute_positions(tx, by_account=True)
     pos = pos[pos["qty"] > 0]
