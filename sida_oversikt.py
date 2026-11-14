@@ -15,7 +15,7 @@ def _load_portfolio(tx):
     open_pos = pos[pos["qty"] > 0]
     tickers = tuple(sorted(open_pos["ticker"]))
     currencies = tuple(sorted(set(open_pos["currency"]) | {"SEK"}))
-    quotes = market.get_quotes(tickers) if tickers else pd.DataFrame(columns=["last", "prev", "change_pct"])
+    quotes = market.get_live_quotes(tickers) if tickers else pd.DataFrame(columns=["last", "prev", "change_pct"])
     fx_now = market.get_fx_now(currencies)
     hold = portfolio.enrich_positions(pos, quotes, fx_now)
     return tx, pos, hold
@@ -68,6 +68,10 @@ def render():
     if hold.empty:
         st.warning("Inga öppna innehav just nu.")
     else:
+        src = market.get_live_quotes(tuple(sorted(hold["ticker"])))["source"]
+        n_av = int((src == "Avanza").sum())
+        if market.use_avanza() and n_av:
+            st.caption(f"🟢 Kurser från Avanza för {n_av} av {len(src)} innehav, övriga från Yahoo Finance.")
         missing = hold[hold["price"].isna()]["ticker"].tolist()
         if missing:
             st.warning(f"Kunde inte hämta kurs för: {', '.join(missing)}. Kontrollera tickern (t.ex. VOLV-B.ST).")

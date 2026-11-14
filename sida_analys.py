@@ -49,6 +49,10 @@ def render():
     name = info.get("longName") or info.get("shortName") or ticker
     cur = info.get("currency", "")
     last, prev = close.iloc[-1], close.iloc[-2] if len(close) > 1 else close.iloc[-1]
+    live = market.get_live_quotes((ticker,))
+    if ticker in live.index and live.loc[ticker, "source"] == "Avanza":
+        last = live.loc[ticker, "last"]
+        prev = live.loc[ticker, "prev"] if pd.notna(live.loc[ticker, "prev"]) else prev
     st.markdown(f"### {name}  <span class='small-muted'>{ticker} · {info.get('exchange', '')} · "
                 f"{info.get('sector', '')}</span>", unsafe_allow_html=True)
     k = st.columns(6)

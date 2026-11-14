@@ -156,7 +156,7 @@ def _af(tx: pd.DataFrame, year: int):
     pos = portfolio.compute_positions(af_tx.drop(columns="acc_type"), by_account=True)
     pos = pos[pos["qty"] > 0]
     if not pos.empty:
-        quotes = market.get_quotes(tuple(sorted(pos["ticker"].unique())))
+        quotes = market.get_live_quotes(tuple(sorted(pos["ticker"].unique())))
         fxn = market.get_fx_now(tuple(sorted(set(pos["currency"]) | {"SEK"})))
         val = pos["qty"] * pos["ticker"].map(quotes["last"]) * pos["currency"].map(fxn).fillna(1.0)
         unreal = (val - pos["cost_sek"]).sum()

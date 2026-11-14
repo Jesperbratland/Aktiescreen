@@ -7,6 +7,7 @@ import streamlit as st
 st.set_page_config(page_title="Aktiescreen", page_icon="🎄", layout="wide",
                    initial_sidebar_state="expanded")
 
+import market  # noqa: E402
 from ui import JULTEMA, christmas_greeting, inject_christmas, inject_css  # noqa: E402
 import sida_analys as stock_analysis  # noqa: E402
 import sida_konton as konton  # noqa: E402
@@ -40,9 +41,17 @@ with st.sidebar:
     if st.button("🔄 Uppdatera kurser", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
+    st.selectbox("Kurskälla", market.PRICE_SOURCES, key="price_source",
+                 help="Avanza ger samma kurser som i Avanza-appen (realtid) för nordiska aktier. "
+                      "Svarar inte Avanza används Yahoo automatiskt.")
+    if hits := st.session_state.get("avanza_hits"):
+        ok, total = hits
+        if total and market.use_avanza():
+            st.caption(f"{'✅' if ok == total else '⚠️'} Avanza-kurs för {ok} av {total} nordiska aktier"
+                       + ("" if ok == total else " – övriga från Yahoo"))
     if JULTEMA:
         st.toggle("❄️ Snöfall", value=True, key="snow")
-    st.caption("Kurser via Yahoo Finance (kan vara ~15 min fördröjda). Data lagras lokalt i data/portfolio.db.")
+    st.caption("Historik och nyckeltal från Yahoo Finance. Data lagras i data/portfolio.db.")
 
 inject_christmas(snow=st.session_state.get("snow", True))
 

@@ -27,7 +27,7 @@ def _holdings(tx):
     open_pos = pos[pos["qty"] > 0]
     if open_pos.empty:
         return pd.DataFrame()
-    quotes = market.get_quotes(tuple(sorted(open_pos["ticker"])))
+    quotes = market.get_live_quotes(tuple(sorted(open_pos["ticker"])))
     fx = market.get_fx_now(tuple(sorted(set(open_pos["currency"]) | {"SEK"})))
     return portfolio.enrich_positions(pos, quotes, fx)
 

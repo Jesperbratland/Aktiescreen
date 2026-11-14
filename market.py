@@ -129,6 +129,42 @@ def get_quotes(tickers: tuple[str, ...]) -> pd.DataFrame:
     return df
 
 
+PRICE_SOURCES = ["Avanza (realtid, nordiska aktier)", "Yahoo Finance (ca 15 min fördröjning)"]
+
+
+def use_avanza() -> bool:
+    return st.session_state.get("price_source", PRICE_SOURCES[0]) == PRICE_SOURCES[0]
+
+
+def get_live_quotes(tickers: tuple[str, ...]) -> pd.DataFrame:
+    """Som get_quotes, men med Avanzas kurser där det går (om valt i sidomenyn).
+
+    Kolumnen 'source' visar varifrån kursen kommer. Faller alltid tillbaka på Yahoo.
+    """
+    df = get_quotes(tickers).copy()
+    df["source"] = "Yahoo"
+    if not tickers or not use_avanza():
+        return df
+    import avanza  # importeras här så att appen fungerar även om modulen strular
+    try:
+        av = avanza.quotes(tickers)
+    except Exception:
+        av = {}
+    for t, q in av.items():
+        y = df.loc[t, "last"] if t in df.index else math.nan
+        # Rimlighetskontroll: fel instrument ger orimlig kurs
+        if not math.isnan(y) and y > 0 and abs(q["last"] / y - 1) > 0.25:
+            continue
+        df.loc[t, "last"] = q["last"]
+        if q.get("prev"):
+            df.loc[t, "prev"] = q["prev"]
+        df.loc[t, "source"] = "Avanza"
+    df["change_pct"] = df["last"] / df["prev"] - 1
+    st.session_state["avanza_hits"] = (int((df["source"] == "Avanza").sum()),
+                                       sum(1 for t in tickers if avanza.supported(t)))
+    return df
+
+
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def get_info(ticker: str) -> dict:
     """Bolagsinformation och nyckeltal (kan vara ofullständigt för vissa bolag)."""

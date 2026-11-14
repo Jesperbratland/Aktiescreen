@@ -7,6 +7,7 @@ import pandas as pd
 import streamlit as st
 
 import aktielista
+import avanza_import as avi
 import db
 import fees
 import market
@@ -19,7 +20,10 @@ def render():
     if msg := st.session_state.pop("flash_konton", None):
         st.success(msg)
 
-    tab1, tab2, tab3 = st.tabs(["➕ Lägg till aktie", "📋 Mina aktier", "🏦 Mina konton"])
+    tab0, tab1, tab2, tab3 = st.tabs(["📥 Importera från Avanza", "➕ Lägg till aktie", "📋 Mina aktier",
+                                      "🏦 Mina konton"])
+    with tab0:
+        _avanza_import()
     with tab1:
         _quick_add()
         with st.expander("📑 Har du många aktier? Lägg till flera på en gång i en tabell"):
@@ -71,7 +75,7 @@ def _quick_add():
 
         info_cur = None if ticker in aktielista.POPULAR else market.get_info(ticker).get("currency")
         cur = aktielista.currency_for(ticker, info_cur)
-        quotes = market.get_quotes((ticker,))
+        quotes = market.get_live_quotes((ticker,))
         price = quotes.loc[ticker, "last"] if ticker in quotes.index else float("nan")
         if pd.isna(price):
             st.warning(f"Hittar ingen aktuell kurs för {ticker} just nu. Du kan lägga till den ändå.")
@@ -144,7 +148,7 @@ def _my_stocks():
     if pos.empty:
         st.info("Inga öppna innehav.")
         return
-    quotes = market.get_quotes(tuple(sorted(pos["ticker"].unique())))
+    quotes = market.get_live_quotes(tuple(sorted(pos["ticker"].unique())))
     fxn = market.get_fx_now(tuple(sorted(set(pos["currency"]) | {"SEK"})))
     pending = st.session_state.get("qa_delete")
 
@@ -328,7 +332,7 @@ def _holdings():
             return
         new_tx, notes = [], []
         with st.spinner("Kontrollerar tickers och valutakurser…"):
-            quotes = market.get_quotes(tuple(sorted(rows["ticker"].unique())))
+            quotes = market.get_live_quotes(tuple(sorted(rows["ticker"].unique())))
             for r in rows.itertuples():
                 found = r.ticker in quotes.index and pd.notna(quotes.loc[r.ticker, "last"])
                 if not found:
@@ -353,4 +357,199 @@ def _holdings():
             return
         db.replace_all(combined)
         st.session_state["flash_konton"] = f"Sparade {len(new)} innehav. " + " ".join(notes)
+        st.rerun()
+
+
+
+# ---------------------------------------------------------------- Avanza-import
+def _resolve_ticker(name: str, isin: str) -> str:
+    """Hitta Yahoo-ticker för ett värdepapper från Avanza-exporten."""
+    t = avi.ticker_from_name(name)
+    if t:
+        return t
+    want = avi.isin_suffix(isin)
+    for query in (isin, name):
+        if not query:
+            continue
+        res = market.search_ticker(query)
+        if res.empty:
+            continue
+        res = res[res["Typ"].isin(["EQUITY", "ETF"]) & res["Ticker"].notna()]
+        if res.empty:
+            continue
+        if want:
+            hit = res[res["Ticker"].str.upper().str.endswith(want)]
+            if not hit.empty:
+                return hit.iloc[0]["Ticker"]
+        elif isin and isin.startswith("US"):
+            hit = res[~res["Ticker"].str.contains(r"\.", regex=True)]
+            if not hit.empty:
+                return hit.iloc[0]["Ticker"]
+        return res.iloc[0]["Ticker"]
+    return ""
+
+
+def _avanza_import():
+    st.markdown("Det enklaste sättet att få in **allt** – med exakt samma GAV, courtage och valutakurser som Avanza.")
+    with st.expander("📋 Så här exporterar du från Avanza", expanded=True):
+        st.markdown(
+            """
+1. Logga in på **avanza.se** i en dator (inte appen).
+2. Gå till **Min ekonomi → Transaktioner**.
+3. Välj tidsperiod **från början** (så långt bak det går), så att alla köp kommer med.
+4. Klicka på **Exportera** och spara filen (den heter ungefär *transaktioner_….csv*).
+5. Ladda upp den här nedanför.
+
+Filen innehåller bara dina affärer – inget lösenord eller personnummer.
+Hittar du inte knappen? Skicka en skärmdump i chatten med Claude, så får du hjälp.
+            """
+        )
+    up = st.file_uploader("Avanzas transaktionsfil (.csv)", type=["csv", "txt"], key="av_file")
+    if up is None:
+        return
+    try:
+        raw = avi.read_file(up.getvalue())
+    except Exception as e:
+        st.error(f"Kunde inte läsa filen: {e}")
+        return
+    if raw.empty:
+        st.error("Filen är tom.")
+        return
+
+    detected = avi.detect_columns(raw)
+    required = ["date", "type", "name", "quantity", "price"]
+    labels = {"date": "Datum", "account": "Konto", "type": "Typ av transaktion", "name": "Värdepapper",
+              "quantity": "Antal", "price": "Kurs", "amount": "Belopp (SEK)", "courtage": "Courtage",
+              "fx": "Valutakurs", "currency": "Valuta", "isin": "ISIN"}
+    all_ok = all(detected[k] for k in required)
+    with st.expander("🧩 Kolumner i filen" + ("" if all_ok else " – behöver hjälp!"), expanded=not all_ok):
+        if not all_ok:
+            st.warning("Alla kolumner kändes inte igen. Välj vilken kolumn i filen som motsvarar vad.")
+        opts = ["–"] + list(raw.columns)
+        cols = {}
+        grid = st.columns(4)
+        for i, (k, lab) in enumerate(labels.items()):
+            cur = detected.get(k)
+            sel = grid[i % 4].selectbox(lab + (" *" if k in required else ""), opts,
+                                        index=opts.index(cur) if cur in opts else 0, key=f"av_col_{k}")
+            cols[k] = None if sel == "–" else sel
+        st.dataframe(raw.head(5), hide_index=True, use_container_width=True)
+    try:
+        tx, stats = avi.parse(raw, cols)
+    except ValueError as e:
+        st.error(str(e))
+        return
+    if tx.empty:
+        st.error("Hittade inga köp, sälj eller utdelningar i filen.")
+        return
+
+    st.success(f"Hittade **{stats['used']}** köp/sälj/utdelningar i {stats['rows']} rader"
+               + (f", och {stats['withholding_rows']} rader källskatt som kopplas till utdelningarna." if stats['withholding_rows'] else "."))
+    if stats["ignored"]:
+        st.caption("Hoppar över (påverkar inte innehaven): " +
+                   ", ".join(f"{k or 'tom'} ({v})" for k, v in stats["ignored"].items()))
+
+    # --- Värdepapper -> ticker
+    st.markdown("#### 1. Kontrollera aktierna")
+    inst = (tx.groupby(["name", "isin"], dropna=False).size().reset_index(name="rader"))
+    cache = st.session_state.setdefault("av_tickers", {})
+    with st.spinner("Letar upp aktierna …"):
+        for r in inst.itertuples():
+            key = f"{r.name}|{r.isin}"
+            if key not in cache:
+                cache[key] = _resolve_ticker(r.name, r.isin)
+    inst["ticker"] = [cache[f"{r.name}|{r.isin}"] for r in inst.itertuples()]
+    inst["status"] = inst["ticker"].map(lambda t: "✅" if t else "❓ Fyll i ticker eller lämna tomt för att hoppa över")
+    ed = st.data_editor(
+        inst[["status", "name", "isin", "ticker", "rader"]], hide_index=True, use_container_width=True,
+        disabled=["status", "name", "isin", "rader"], key="av_inst",
+        column_config={"status": "", "name": "Värdepapper (Avanza)", "isin": "ISIN",
+                       "ticker": st.column_config.TextColumn("Ticker", help="Yahoo-ticker, t.ex. VOLV-B.ST. Tomt = hoppa över."),
+                       "rader": st.column_config.NumberColumn("Rader")})
+    st.caption("Fonder finns oftast inte hos Yahoo Finance – lämna dem tomma så hoppas de över.")
+    tmap = {(r.name, r.isin): str(r.ticker or "").strip().upper() for r in ed.itertuples()}
+
+    # --- Konton
+    st.markdown("#### 2. Kontrollera kontona")
+    acc = pd.DataFrame({"avanza": sorted(tx["account"].unique())})
+    existing = db.load_accounts().set_index("name")
+    acc["name"] = acc["avanza"]
+    acc["type"] = [existing["type"].get(a, avi.guess_account_type(a)) for a in acc["avanza"]]
+    acc_ed = st.data_editor(acc, hide_index=True, use_container_width=True, disabled=["avanza"], key="av_acc",
+                            column_config={
+                                "avanza": "Konto i filen",
+                                "name": st.column_config.TextColumn("Namn i appen", required=True),
+                                "type": st.column_config.SelectboxColumn("Kontotyp", options=list(db.ACCOUNT_TYPES),
+                                                                         required=True)})
+    amap = dict(zip(acc_ed["avanza"], acc_ed["name"].astype(str).str.strip()))
+    atype = dict(zip(acc_ed["name"].astype(str).str.strip(), acc_ed["type"]))
+    if len(acc) == 1 and acc["avanza"].iloc[0] == "Avanza":
+        st.caption("Filen saknar kontokolumn – allt hamnar på ett konto. Byt namn och kontotyp ovan om du vill.")
+
+    # --- Bygg transaktioner
+    tx["ticker"] = [tmap.get((r.name, r.isin), "") for r in tx.itertuples()]
+    use = tx[tx["ticker"] != ""].copy()
+    skipped = len(tx) - len(use)
+    rows, no_fx = [], []
+    for r in use.itertuples():
+        cur = aktielista.currency_for(r.ticker, r.currency if r.currency in db.CURRENCIES else None)
+        fx = avi.fx_for_row(r, cur)
+        if fx is None:
+            fx = market.get_fx_on(cur, r.date) or 1.0
+            no_fx.append(r.ticker)
+        rows.append({"date": r.date, "account": amap.get(r.account, r.account), "ticker": r.ticker,
+                     "type": r.kind, "quantity": r.quantity, "price": r.price if pd.notna(r.price) else 0.0,
+                     "fee": float(r.fee), "currency": cur, "fx_rate": float(fx), "note": "Avanza-import"})
+    new = pd.DataFrame(rows)
+    if new.empty:
+        st.warning("Inga rader att importera – fyll i ticker för minst en aktie.")
+        return
+
+    # --- Förhandsgranskning
+    st.markdown("#### 3. Så här blir ditt innehav")
+    preview = portfolio.compute_positions(new.assign(id=range(len(new))), by_account=True)
+    preview = preview[preview["qty"] > 1e-9]
+    st.dataframe(preview.assign(gav=preview["cost_local"] / preview["qty"])[
+        ["account", "ticker", "qty", "gav", "currency", "cost_sek"]], hide_index=True, use_container_width=True,
+        column_config={"account": "Konto", "ticker": "Ticker",
+                       "qty": st.column_config.NumberColumn("Antal", format="%.4g"),
+                       "gav": st.column_config.NumberColumn("GAV", format="%.2f"), "currency": "Valuta",
+                       "cost_sek": st.column_config.NumberColumn("Anskaffning (SEK)", format="%.0f")})
+    st.caption("💡 Jämför antal och GAV med Avanza-appen. Skiljer något? Kontrollera att exporten gick från start.")
+    if skipped:
+        st.caption(f"{skipped} rader hoppas över (värdepapper utan ticker).")
+
+    tx_now = db.load_transactions()
+    only_demo = tx_now.empty or tx_now["note"].str.startswith("Demo").all()
+    mode = st.radio("Vad ska hända med det som redan finns i appen?",
+                    ["Ersätt allt med Avanza-filen", "Lägg till (behåll det jag redan lagt in)"],
+                    index=0, key="av_mode", horizontal=True)
+    if not only_demo and mode.startswith("Ersätt"):
+        st.warning("Allt du tidigare lagt in i appen ersätts av innehållet i filen.")
+
+    combined = new if mode.startswith("Ersätt") else pd.concat(
+        [tx_now[~tx_now["note"].str.startswith("Demo")].drop(columns="id"), new], ignore_index=True)
+    combined = combined.reset_index(drop=True)
+    combined.insert(0, "id", range(1, len(combined) + 1))
+    errors = portfolio.validate(combined)
+    if errors:
+        st.error("Filen verkar sakna några köp (säljer fler aktier än som köpts). Exportera från ett tidigare datum "
+                 "– helst från när du öppnade kontot.\n\n- " + "\n- ".join(errors[:10]))
+        return
+
+    if st.button(f"📥 Importera {len(new)} transaktioner", type="primary"):
+        # Konton: lägg till nya, uppdatera kontotyp på befintliga
+        accs = db.load_accounts()
+        for name, typ in atype.items():
+            if name in accs["name"].values:
+                accs.loc[accs["name"] == name, "type"] = typ
+            else:
+                accs = pd.concat([accs, pd.DataFrame([{"name": name, "type": typ, "broker": "Avanza",
+                                                       "courtage_class": "Mini", "custom_pct": 0.0,
+                                                       "custom_min": 0.0}])], ignore_index=True)
+        db.save_accounts(accs)
+        db.replace_all(combined)
+        st.session_state.pop("av_tickers", None)
+        st.session_state["flash_konton"] = (f"✅ Importerade {len(new)} transaktioner från Avanza. "
+                                            "Kolla Översikt – kurserna följer nu Avanza.")
         st.rerun()
