@@ -67,11 +67,6 @@ def render():
                 fmt_pct(cash / (value + cash), 0, sign=False) + " av totalen" if value + cash > 0 else None,
                 delta_color="off", help="Ändra under Mitt innehav → Pengar för köp")
     c[3].metric("Idag", fmt_sek(day), fmt_pct(day / prev_value if prev_value else None, 2))
-    c = st.columns(4)
-    c[0].metric("Orealiserat", fmt_sek(unreal), fmt_pct(unreal / cost if cost else None))
-    c[1].metric("Realiserat", fmt_sek(realized))
-    c[2].metric("Utdelningar", fmt_sek(divs))
-    c[3].metric("Totalt resultat", fmt_sek(total))
     try:
         import sida_bevakning
         hits = sida_bevakning.alerts()

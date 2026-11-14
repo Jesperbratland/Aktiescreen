@@ -144,18 +144,39 @@ def _quick_add():
 
 
 # ---------------------------------------------------------------- Mina aktier
+def _results(all_pos, pos, quotes, fxn):
+    """Resultatsiffror, hopfällda så att de inte tar fokus."""
+    value = cost = 0.0
+    if not pos.empty:
+        value = float((pos["qty"] * pos["ticker"].map(quotes["last"]) * pos["currency"].map(fxn).fillna(1.0)).sum())
+        cost = float(pos["cost_sek"].sum())
+    unreal = value - cost
+    realized = float(all_pos["realized_sek"].sum())
+    divs = float(all_pos["dividends_sek"].sum())
+    total = unreal + realized + divs
+    with st.expander(f"📊 Mitt resultat · totalt {fmt_sek(total)}"):
+        c = st.columns(4)
+        c[0].metric("Orealiserat", fmt_sek(unreal), fmt_pct(unreal / cost) if cost else None,
+                    help="Vinst/förlust på aktier du fortfarande äger – ändras med kursen.")
+        c[1].metric("Realiserat", fmt_sek(realized),
+                    help="Vinst/förlust på aktier du har sålt – inlåst. På AF-konto är det detta du skattar för.")
+        c[2].metric("Utdelningar", fmt_sek(divs), help="Alla utdelningar du fått, efter källskatt.")
+        c[3].metric("Totalt resultat", fmt_sek(total), help="Orealiserat + realiserat + utdelningar.")
+
+
 def _my_stocks():
     tx = db.load_transactions()
     if tx.empty:
         st.info("Inga aktier inlagda än. Klicka på fliken **➕ Lägg till aktie** ovanför.")
         return
-    pos = portfolio.compute_positions(tx, by_account=True)
-    pos = pos[pos["qty"] > 0]
+    all_pos = portfolio.compute_positions(tx, by_account=True)
+    pos = all_pos[all_pos["qty"] > 0]
+    quotes = market.get_live_quotes(tuple(sorted(pos["ticker"].unique()))) if not pos.empty else None
+    fxn = market.get_fx_now(tuple(sorted(set(pos["currency"]) | {"SEK"})))
+    _results(all_pos, pos, quotes, fxn)
     if pos.empty:
         st.info("Inga öppna innehav.")
         return
-    quotes = market.get_live_quotes(tuple(sorted(pos["ticker"].unique())))
-    fxn = market.get_fx_now(tuple(sorted(set(pos["currency"]) | {"SEK"})))
     pending = st.session_state.get("qa_delete")
 
     for acc, g in pos.groupby("account", sort=False):
