@@ -90,12 +90,23 @@ def _isk(tx: pd.DataFrame, accounts: pd.DataFrame, year: int):
     st.caption("\\* = kvartalet har inte startat än, uppskattat med dagens värde. "
                "Nettoköp används som uppskattning av insättningar.")
 
+    isk_names = set(accounts.loc[accounts["type"].isin(["ISK", "KF"]), "name"])
+    stored_cash = sum(v for k, v in db.get_cash().items() if k in isk_names)
+    log = db.load_cash_log()
+    logged_dep = 0.0
+    if not log.empty:
+        ly = log[(pd.to_datetime(log["date"]).dt.year == year) & log["account"].isin(isk_names)
+                 & log["kind"].isin(["INSÄTTNING", "UTTAG"])]
+        logged_dep = float(ly.loc[ly["kind"] == "INSÄTTNING", "amount"].sum())
+    if logged_dep > 0:
+        total_dep = logged_dep
     with st.expander("Justera underlaget", expanded=False):
         a, b = st.columns(2)
-        cash = a.number_input("Ungefärlig kassa på ISK/KF (kr)", 0.0, step=1000.0,
-                              help="Kontanter på kontona ingår också i kapitalunderlaget.")
-        dep_override = b.number_input("Faktiska insättningar under året (kr)", 0.0, value=float(round(total_dep)),
-                                      step=1000.0, help="Står i din app under Transaktioner/Insättningar.")
+        cash = a.number_input("Kassa på ISK/KF (kr)", 0.0, value=float(max(stored_cash, 0.0)), step=1000.0,
+                              help="Hämtas från Pengar för köp. Kontanter ingår också i kapitalunderlaget.")
+        dep_override = b.number_input("Insättningar under året (kr)", 0.0, value=float(round(total_dep)),
+                                      step=1000.0, help="Från dina registrerade insättningar, annars uppskattat "
+                                                        "från nettoköp. Står i din app under Transaktioner.")
     res = tax.isk_tax(total_q + 4 * cash, dep_override, year, slr, fri)
 
     st.subheader(f"Uppskattad ISK/KF-skatt {year}")

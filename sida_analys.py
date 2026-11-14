@@ -7,7 +7,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 import analysis, db, market, portfolio
-from ui import DISCLAIMER, NEG, POS, fmt_big, fmt_num, fmt_pct, signal_card
+from ui import DISCLAIMER, NEG, POS, fmt_big, fmt_num, fmt_pct, fmt_sek, signal_card
 
 
 def render():
@@ -64,6 +64,7 @@ def render():
     k[4].metric("Direktavkastning", fmt_pct(dr / cp, 2, sign=False) if dr and cp else "–")
     y = close.tail(252)
     k[5].metric("52v intervall", f"{fmt_num(y.min(), 0)}–{fmt_num(y.max(), 0)}")
+    _buy_calc(ticker, float(last), cur)
 
     # ---------- Graf ----------
     sub = [i for i in ("Volym", "RSI", "MACD") if i in indicators]
@@ -189,3 +190,41 @@ def render():
         st.plotly_chart(fig2, use_container_width=True)
 
     st.caption(DISCLAIMER)
+
+
+
+def _buy_calc(ticker: str, price: float, cur: str):
+    """Hur många aktier räcker pengarna till – inklusive courtage och valutaväxling."""
+    import math
+
+    import aktielista
+    import fees
+    cash = db.get_cash()
+    if not cash or max(cash.values()) <= 0 or not price or math.isnan(price):
+        return
+    cur = aktielista.currency_for(ticker, cur)
+    fx = market.get_fx_now((cur,)).get(cur, 1.0) if cur != "SEK" else 1.0
+    with st.expander(f"🛒 Hur många {ticker} kan jag köpa?"):
+        accounts = db.load_accounts().set_index("name")
+        names = [n for n in accounts.index if cash.get(n, 0) > 0]
+        c = st.columns([2, 2, 3])
+        acc = c[0].selectbox("Konto", names, format_func=lambda n: f"{n} ({fmt_num(cash[n], 0)} kr)",
+                             key="buy_acc")
+        budget = c[1].number_input("Belopp att använda (kr)", 0.0, float(cash[acc]), float(cash[acc]), 500.0,
+                                   key=f"buy_budget_{acc}")
+        a = accounts.loc[acc]
+        unit = price * fx
+        n = int(budget // unit)
+        while n > 0:
+            f = fees.calc_fees(n * unit, a["broker"], a["courtage_class"], cur != "SEK", a["custom_pct"], a["custom_min"])
+            if n * unit + f["total"] <= budget:
+                break
+            n -= 1
+        if n <= 0:
+            c[2].warning(f"Pengarna räcker inte till en aktie ({fmt_sek(unit)} + avgifter).")
+            return
+        f = fees.calc_fees(n * unit, a["broker"], a["courtage_class"], cur != "SEK", a["custom_pct"], a["custom_min"])
+        c[2].metric("Du kan köpa", f"{n} st", f"kostar {fmt_sek(n * unit + f['total'])} inkl. avgifter "
+                    f"{fmt_sek(f['total'], 2)}", delta_color="off")
+        st.caption(f"Kvar efter köp: {fmt_sek(cash[acc] - n * unit - f['total'])}. Kurs {fmt_num(price, 2)} {cur}"
+                   + (f" × {fmt_num(fx, 4)} SEK/{cur}" if cur != "SEK" else "") + ".")

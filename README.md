@@ -18,7 +18,7 @@ Appen öppnas på http://localhost:8501. Klicka **Ladda exempelportfölj** på �
 | Sida | Innehåll |
 |---|---|
 | **Översikt** | Marknadsvärde, dagens förändring, orealiserat/realiserat resultat, utdelningar. Fördelning per innehav/valuta/sektor. Värde vs insatt kapital. Tidsviktad avkastning (TWR) mot OMXS30, S&P 500 m.fl. |
-| **Mitt innehav** | **Importera alla affärer från Avanza** (CSV-export) med exakt GAV, courtage och valutakurser. Lägg till aktier genom att skriva bolagsnamnet – ticker och valuta hittas automatiskt. Lista över dina aktier per konto med ta bort-knapp. Konton (ISK, KF, AF), mäklare och courtageklass. |
+| **Mitt innehav** | **Importera alla affärer från Avanza** (CSV-export) med exakt GAV, courtage och valutakurser. Lägg till aktier genom att skriva bolagsnamnet – ticker och valuta hittas automatiskt. Lista över dina aktier per konto med ta bort-knapp. **Pengar för köp** per konto (sätt in, ta ut, ange saldo) som uppdateras automatiskt vid köp, sälj och utdelning. Konton (ISK, KF, AF), mäklare och courtageklass. |
 | **Skatt & avgifter** | Uppskattad ISK/KF-schablonskatt (kvartalsvärden, 300 000 kr fribelopp 2026), skatt på vinster/utdelningar på AF med K4-underlag, courtage och valutaväxling, tips om courtageklass samt jämförelse ISK vs AF. |
 | **Transaktioner** | Formulär för köp/sälj/utdelning (valutakurs hämtas automatiskt), redigerbar tabell, CSV-import/export, tickersök på bolagsnamn, realiserat resultat per aktie. |
 | **Aktieanalys** | Candlestick med MA20/50/200, Bollinger, RSI, MACD, volym. Dina köp/sälj och ditt GAV i grafen. Avkastning per period, Sharpe, Sortino, max drawdown, beta, nyckeltal, analytikerkonsensus, jämförelse mot andra aktier. |

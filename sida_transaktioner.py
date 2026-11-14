@@ -54,6 +54,8 @@ def _add_form():
         note = c[0].text_input("Anteckning", placeholder="Valfritt – t.ex. investeringscase")
         auto_fee = c[1].checkbox("Räkna courtage automatiskt", value=True,
                                  help="Används vid köp/sälj när avgiften är 0. Inkluderar 0,25 % valutaväxling för utländska aktier.")
+        upd_cash = c[1].checkbox("Uppdatera kontots saldo (pengar för köp)", value=True,
+                                 help="Köp drar pengar från kontot, sälj och utdelning lägger till.")
         submitted = st.form_submit_button("Spara transaktion", type="primary")
 
     if not submitted:
@@ -86,7 +88,12 @@ def _add_form():
         return
     db.add_transaction(date.isoformat(), ticker, type_, qty, price, fee, currency, fx, note, account)
     amount = qty * price * fx
-    st.session_state["flash"] = f"Sparat på {account}: {type_} {qty:g} {ticker} à {price:g} {currency} ≈ {fmt_sek(amount)}{fee_note}"
+    cash_note = ""
+    if upd_cash and type_ in ("KÖP", "SÄLJ", "UTDELNING"):
+        delta = -(amount + fee) if type_ == "KÖP" else amount - fee
+        bal = db.change_cash(account, delta, type_, f"{qty:g} {ticker}", date.isoformat())
+        cash_note = f" · saldo nu {fmt_sek(bal)}" + (" ⚠️ negativt!" if bal < 0 else "")
+    st.session_state["flash"] = f"Sparat på {account}: {type_} {qty:g} {ticker} à {price:g} {currency} ≈ {fmt_sek(amount)}{fee_note}{cash_note}"
     st.rerun()
 
 

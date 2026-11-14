@@ -39,11 +39,14 @@ def render():
         a.info("🎁 Du tittar på **exempelaktier**. Lägg in dina egna så försvinner de.")
         if b.button("➕ Lägg in mina aktier", type="primary", use_container_width=True):
             st.switch_page(st.session_state["_pages"]["konton"])
-    accs = sorted(tx["account"].unique())
+    cash_map = db.get_cash()
+    accs = sorted(set(tx["account"]) | {a for a, c in cash_map.items() if c})
+    choice = None
     if len(accs) > 1:
         choice = st.segmented_control("Konto", ["Alla konton", *accs], default="Alla konton")
         if choice and choice != "Alla konton":
             tx = tx[tx["account"] == choice]
+    cash = cash_map.get(choice, 0.0) if choice and choice != "Alla konton" else sum(cash_map.values())
 
     with st.spinner("Hämtar kurser…"):
         tx, pos, hold = _load_portfolio(tx)
@@ -57,13 +60,20 @@ def render():
     total = unreal + realized + divs
     prev_value = value - day
 
-    c = st.columns(6)
-    c[0].metric("Marknadsvärde", fmt_sek(value))
-    c[1].metric("Idag", fmt_sek(day), fmt_pct(day / prev_value if prev_value else None, 2))
-    c[2].metric("Orealiserat", fmt_sek(unreal), fmt_pct(unreal / cost if cost else None))
-    c[3].metric("Realiserat", fmt_sek(realized))
-    c[4].metric("Utdelningar", fmt_sek(divs))
-    c[5].metric("Totalt resultat", fmt_sek(total))
+    c = st.columns(4)
+    c[0].metric("Totalt värde", fmt_sek(value + cash), help="Aktier + pengar tillgängliga för köp")
+    c[1].metric("Aktier", fmt_sek(value))
+    c[2].metric("💰 Tillgängligt för köp", fmt_sek(cash),
+                fmt_pct(cash / (value + cash), 0, sign=False) + " av totalen" if value + cash > 0 else None,
+                delta_color="off", help="Ändra under Mitt innehav → Pengar för köp")
+    c[3].metric("Idag", fmt_sek(day), fmt_pct(day / prev_value if prev_value else None, 2))
+    c = st.columns(4)
+    c[0].metric("Orealiserat", fmt_sek(unreal), fmt_pct(unreal / cost if cost else None))
+    c[1].metric("Realiserat", fmt_sek(realized))
+    c[2].metric("Utdelningar", fmt_sek(divs))
+    c[3].metric("Totalt resultat", fmt_sek(total))
+    if cash < 0:
+        st.warning("Saldot för köp är negativt – kontrollera under **Mitt innehav → Pengar för köp**.")
 
     if hold.empty:
         st.warning("Inga öppna innehav just nu.")
@@ -89,6 +99,10 @@ def render():
             else:
                 alloc["group"] = alloc["ticker"]
             alloc = alloc.groupby("group", as_index=False)["value_sek"].sum()
+            if cash > 0:
+                cash_group = "SEK" if by == "Valuta" else "💰 Kontanter"
+                alloc = pd.concat([alloc, pd.DataFrame([{"group": cash_group, "value_sek": cash}])])
+                alloc = alloc.groupby("group", as_index=False)["value_sek"].sum()
             fig = px.pie(alloc, names="group", values="value_sek", hole=0.6)
             fig.update_traces(textposition="inside", textinfo="percent+label",
                               hovertemplate="%{label}<br>%{value:,.0f} kr<extra></extra>")

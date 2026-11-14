@@ -20,8 +20,10 @@ def render():
     if msg := st.session_state.pop("flash_konton", None):
         st.success(msg)
 
-    tab0, tab1, tab2, tab3 = st.tabs(["📥 Importera från Avanza", "➕ Lägg till aktie", "📋 Mina aktier",
-                                      "🏦 Mina konton"])
+    tab0, tab1, tab2, tabc, tab3 = st.tabs(["📥 Importera från Avanza", "➕ Lägg till aktie", "📋 Mina aktier",
+                                            "💰 Pengar för köp", "🏦 Mina konton"])
+    with tabc:
+        _cash()
     with tab0:
         _avanza_import()
     with tab1:
@@ -196,8 +198,9 @@ def _accounts():
     used = set(tx["account"]) if not tx.empty else set()
 
     st.markdown("Lägg till en rad per konto du har. Exempel: *ISK Avanza*, *KF Nordnet*, *Depå SEB*.")
+    cash_by_name = dict(zip(acc["name"], acc["cash"]))
     edited = st.data_editor(
-        acc, num_rows="dynamic", hide_index=True, use_container_width=True, key="acc_editor",
+        acc.drop(columns="cash"), num_rows="dynamic", hide_index=True, use_container_width=True, key="acc_editor",
         column_config={
             "name": st.column_config.TextColumn("Kontonamn", required=True, help="Valfritt namn, t.ex. 'ISK Avanza'"),
             "type": st.column_config.SelectboxColumn("Kontotyp", options=list(db.ACCOUNT_TYPES), required=True,
@@ -232,6 +235,7 @@ def _accounts():
         if errors:
             st.error("\n\n".join(errors))
         else:
+            df["cash"] = df["name"].map(cash_by_name).fillna(0.0)
             db.save_accounts(df)
             st.session_state["flash_konton"] = "Konton sparade."
             st.rerun()
@@ -570,3 +574,46 @@ Hittar du inte knappen? Skicka en skärmdump i chatten med Claude, så får du h
         st.session_state["flash_konton"] = (f"✅ Importerade {len(new)} transaktioner från Avanza. "
                                             "Kolla Översikt – kurserna följer nu Avanza.")
         st.rerun()
+
+
+
+# ---------------------------------------------------------------- Pengar
+def _cash():
+    accounts = db.load_accounts()
+    cash = db.get_cash()
+    total = sum(cash.values())
+    st.markdown("Hur mycket pengar har du **tillgängligt för köp** på varje konto? I Avanza heter det "
+                "*Köpkraft* eller *Tillgängligt för köp*.")
+    st.metric("💰 Totalt tillgängligt för köp", fmt_sek(total))
+
+    for acc in accounts.itertuples():
+        with st.container(border=True):
+            a, b = st.columns([2, 3])
+            a.markdown(f"**🏦 {acc.name}**  \n<span class='small-muted'>{acc.type}</span>", unsafe_allow_html=True)
+            a.metric("Tillgängligt", fmt_sek(cash.get(acc.name, 0.0)), label_visibility="collapsed")
+            with b:
+                amount = st.number_input("Belopp (kr)", min_value=0.0, step=500.0, key=f"cash_amt_{acc.name}")
+                c1, c2, c3 = st.columns(3)
+                if c1.button("➕ Sätt in", key=f"cash_in_{acc.name}", use_container_width=True, disabled=amount <= 0):
+                    db.change_cash(acc.name, amount, "INSÄTTNING")
+                    st.session_state["flash_konton"] = f"Satte in {fmt_sek(amount)} på {acc.name}."
+                    st.rerun()
+                if c2.button("➖ Ta ut", key=f"cash_out_{acc.name}", use_container_width=True, disabled=amount <= 0):
+                    db.change_cash(acc.name, -amount, "UTTAG")
+                    st.session_state["flash_konton"] = f"Tog ut {fmt_sek(amount)} från {acc.name}."
+                    st.rerun()
+                if c3.button("✏️ Ange saldo", key=f"cash_set_{acc.name}", use_container_width=True,
+                             help="Sätter saldot till exakt beloppet – t.ex. det som står i Avanza-appen."):
+                    db.change_cash(acc.name, amount, "SALDO")
+                    st.session_state["flash_konton"] = f"{acc.name}: saldot är nu {fmt_sek(amount)}."
+                    st.rerun()
+
+    st.caption("💡 När du registrerar köp, sälj och utdelningar under **Transaktioner** ändras saldot automatiskt. "
+               "Insättningar används också för att räkna ISK-skatten.")
+    log = db.load_cash_log()
+    if not log.empty:
+        with st.expander("📜 Historik"):
+            st.dataframe(log, hide_index=True, use_container_width=True, column_config={
+                "date": "Datum", "account": "Konto", "kind": "Händelse",
+                "amount": st.column_config.NumberColumn("Belopp", format="%.2f"),
+                "balance": st.column_config.NumberColumn("Saldo efter", format="%.2f"), "note": "Notering"})

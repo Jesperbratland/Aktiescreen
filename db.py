@@ -17,7 +17,7 @@ ACCOUNT_TYPES = {
     "KF": "KF – Kapitalförsäkring",
     "AF": "AF – Aktie- och fondkonto (depå)",
 }
-ACCOUNT_COLUMNS = ["name", "type", "broker", "courtage_class", "custom_pct", "custom_min"]
+ACCOUNT_COLUMNS = ["name", "type", "broker", "courtage_class", "custom_pct", "custom_min", "cash"]
 DEFAULT_ACCOUNT = "Mitt ISK"
 
 SCHEMA = """
@@ -40,7 +40,17 @@ CREATE TABLE IF NOT EXISTS accounts (
     broker          TEXT NOT NULL DEFAULT 'Avanza',   -- Avanza / Nordnet / Annan
     courtage_class  TEXT NOT NULL DEFAULT 'Mini',
     custom_pct      REAL NOT NULL DEFAULT 0,          -- egen courtagesats i %, för 'Annan'
-    custom_min      REAL NOT NULL DEFAULT 0           -- eget minimicourtage i kr
+    custom_min      REAL NOT NULL DEFAULT 0,          -- eget minimicourtage i kr
+    cash            REAL NOT NULL DEFAULT 0           -- pengar tillgängliga för köp (SEK)
+);
+CREATE TABLE IF NOT EXISTS cash_log (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    date     TEXT NOT NULL,
+    account  TEXT NOT NULL,
+    kind     TEXT NOT NULL,     -- INSÄTTNING / UTTAG / SALDO / KÖP / SÄLJ / UTDELNING
+    amount   REAL NOT NULL,     -- + in på kontot, − ut från kontot
+    balance  REAL NOT NULL,     -- saldo efter händelsen
+    note     TEXT
 );
 """
 
@@ -53,6 +63,9 @@ def _conn() -> sqlite3.Connection:
     cols = [r[1] for r in conn.execute("PRAGMA table_info(transactions)")]
     if "account" not in cols:
         conn.execute(f"ALTER TABLE transactions ADD COLUMN account TEXT NOT NULL DEFAULT '{DEFAULT_ACCOUNT}'")
+    acols = [r[1] for r in conn.execute("PRAGMA table_info(accounts)")]
+    if "cash" not in acols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN cash REAL NOT NULL DEFAULT 0")
     if conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0:
         conn.execute("INSERT INTO accounts (name, type, broker, courtage_class) VALUES (?, 'ISK', 'Avanza', 'Mini')",
                      (DEFAULT_ACCOUNT,))
@@ -71,12 +84,16 @@ def account_names() -> list[str]:
 
 
 def save_accounts(df: pd.DataFrame) -> None:
-    df = df[ACCOUNT_COLUMNS].copy()
+    df = df.copy()
+    if "cash" not in df:
+        df["cash"] = 0.0
+    df = df[ACCOUNT_COLUMNS]
     df["custom_pct"] = df["custom_pct"].fillna(0.0)
     df["custom_min"] = df["custom_min"].fillna(0.0)
+    df["cash"] = df["cash"].fillna(0.0)
     with _conn() as conn:
         conn.execute("DELETE FROM accounts")
-        conn.executemany(f"INSERT INTO accounts ({', '.join(ACCOUNT_COLUMNS)}) VALUES (?,?,?,?,?,?)",
+        conn.executemany(f"INSERT INTO accounts ({', '.join(ACCOUNT_COLUMNS)}) VALUES (?,?,?,?,?,?,?)",
                          list(df.itertuples(index=False, name=None)))
 
 
@@ -84,6 +101,36 @@ def rename_account(old: str, new: str) -> None:
     with _conn() as conn:
         conn.execute("UPDATE accounts SET name = ? WHERE name = ?", (new, old))
         conn.execute("UPDATE transactions SET account = ? WHERE account = ?", (new, old))
+        conn.execute("UPDATE cash_log SET account = ? WHERE account = ?", (new, old))
+
+
+# ---------- Pengar tillgängliga för köp ----------
+def get_cash() -> dict[str, float]:
+    with _conn() as conn:
+        return {n: float(c) for n, c in conn.execute("SELECT name, cash FROM accounts")}
+
+
+def change_cash(account: str, amount: float, kind: str, note: str = "", date: str | None = None) -> float:
+    """Ändrar saldot med amount (+ in, − ut). kind='SALDO' sätter saldot till amount. Returnerar nytt saldo."""
+    import datetime as _dt
+    date = date or _dt.date.today().isoformat()
+    with _conn() as conn:
+        row = conn.execute("SELECT cash FROM accounts WHERE name = ?", (account,)).fetchone()
+        if row is None:
+            conn.execute("INSERT INTO accounts (name) VALUES (?)", (account,))
+            row = (0.0,)
+        old = float(row[0])
+        new = float(amount) if kind == "SALDO" else old + float(amount)
+        conn.execute("UPDATE accounts SET cash = ? WHERE name = ?", (round(new, 2), account))
+        conn.execute("INSERT INTO cash_log (date, account, kind, amount, balance, note) VALUES (?,?,?,?,?,?)",
+                     (date, account, kind, round(new - old, 2), round(new, 2), note))
+    return new
+
+
+def load_cash_log() -> pd.DataFrame:
+    with _conn() as conn:
+        return pd.read_sql_query("SELECT date, account, kind, amount, balance, note FROM cash_log "
+                                 "ORDER BY date DESC, id DESC", conn)
 
 
 # ---------- Transaktioner ----------
