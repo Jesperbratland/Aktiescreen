@@ -125,7 +125,8 @@ def _editor():
                                                         default=db.account_names()[0]),
             "ticker": st.column_config.TextColumn("Ticker", required=True),
             "type": st.column_config.SelectboxColumn("Typ", options=db.TYPES, required=True),
-            "quantity": st.column_config.NumberColumn("Antal", min_value=0, format="%.4f", required=True),
+            "quantity": st.column_config.NumberColumn("Antal", format="%.4f", required=True,
+                                                      help="Negativt endast för JUSTERING (t.ex. flytt ut)."),
             "price": st.column_config.NumberColumn("Kurs", min_value=0, format="%.4f", required=True),
             "fee": st.column_config.NumberColumn("Avgift (SEK)", min_value=0, format="%.2f", default=0.0),
             "currency": st.column_config.SelectboxColumn("Valuta", options=db.CURRENCIES, default="SEK"),
@@ -187,6 +188,13 @@ def _import_export():
         st.caption("Kolumner: date, account, ticker, type, quantity, price, fee, currency, fx_rate, note")
     with c2:
         up = st.file_uploader("Importera CSV", type="csv")
+        if up is not None:
+            head = up.getvalue()[:400]
+            if b"Datum" in head and b"Antal" in head and b"Kurs" in head:
+                st.warning("Det här är en fil från **Avanza** – använd importen som är gjord för den, "
+                           "så blir GAV, courtage och konton rätt.")
+                st.page_link(st.session_state["_pages"]["konton"], label="📥 Gå till Mitt innehav → Importera från Avanza")
+                return
         mode = st.radio("Läge", ["Lägg till", "Ersätt allt"], horizontal=True)
         if up is not None and st.button("Importera"):
             try:

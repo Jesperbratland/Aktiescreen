@@ -499,7 +499,8 @@ Hittar du inte knappen? Skicka en skärmdump i chatten med Claude, så får du h
             no_fx.append(r.ticker)
         rows.append({"date": r.date, "account": amap.get(r.account, r.account), "ticker": r.ticker,
                      "type": r.kind, "quantity": r.quantity, "price": r.price if pd.notna(r.price) else 0.0,
-                     "fee": float(r.fee), "currency": cur, "fx_rate": float(fx), "note": "Avanza-import"})
+                     "fee": float(r.fee), "currency": cur, "fx_rate": float(fx),
+                     "note": "Avanza-import" + (f" ({r.adj})" if r.adj else "")})
     new = pd.DataFrame(rows)
     if new.empty:
         st.warning("Inga rader att importera – fyll i ticker för minst en aktie.")
@@ -532,10 +533,26 @@ Hittar du inte knappen? Skicka en skärmdump i chatten med Claude, så får du h
     combined = combined.reset_index(drop=True)
     combined.insert(0, "id", range(1, len(combined) + 1))
     errors = portfolio.validate(combined)
-    if errors:
-        st.error("Filen verkar sakna några köp (säljer fler aktier än som köpts). Exportera från ett tidigare datum "
-                 "– helst från när du öppnade kontot.\n\n- " + "\n- ".join(errors[:10]))
+    hard = [e for e in errors if not portfolio.is_oversell_error(e)]
+    soft = [e for e in errors if portfolio.is_oversell_error(e)]
+    if hard:
+        st.error("Något i filen gick inte att tolka:\n\n- " + "\n- ".join(hard[:10]))
         return
+    if soft:
+        st.warning(
+            f"⚠️ {len(soft)} försäljning(ar) gäller aktier som köptes **innan** exportens startdatum eller "
+            "flyttades in från en annan bank. Importen fungerar ändå – de raderna räknas bara mot det antal som "
+            "finns. Vill du få helt rätt resultat: exportera från ett tidigare datum.")
+        with st.expander("Visa vilka"):
+            st.markdown("- " + "\n- ".join(soft[:30]))
+    if stats.get("adjustments"):
+        st.caption(f"🔀 {stats['adjustments']} splittar/flyttar av aktier har tagits med.")
+    moved_in = new[(new["type"] == "JUSTERING") & (new["quantity"] > 0) & (new["price"] == 0)
+                   & ~new["note"].str.contains("split")]
+    if not moved_in.empty:
+        st.info("ℹ️ Aktier som flyttats in från en annan bank saknar inköpspris i Avanzas fil "
+                f"({', '.join(sorted(moved_in['ticker'].unique()))}). Deras GAV blir därför för lågt – "
+                "rätta under **Transaktioner** genom att fylla i kursen på JUSTERING-raden.")
 
     if st.button(f"📥 Importera {len(new)} transaktioner", type="primary"):
         # Konton: lägg till nya, uppdatera kontotyp på befintliga

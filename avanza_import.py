@@ -86,6 +86,8 @@ def classify(type_text: str) -> str | None:
         return "SÄLJ"
     if t.startswith("köp") or t == "köp":
         return "KÖP"
+    if "inlösen" in t:
+        return "SÄLJ"
     return None
 
 
@@ -138,21 +140,47 @@ def parse(df: pd.DataFrame, cols: dict[str, str | None]) -> tuple[pd.DataFrame, 
         "type_text": col("type"),
         "name": col("name").str.strip(),
         "isin": col("isin").str.strip().str.upper(),
-        "quantity": col("quantity").map(parse_number).abs(),
+        "qraw": col("quantity").map(parse_number),
         "price": col("price").map(parse_number).abs(),
         "amount": col("amount").map(parse_number).abs(),
         "courtage": col("courtage").map(parse_number).abs().fillna(0.0),
         "fx_col": col("fx").map(parse_number),
         "currency": col("currency").str.strip().str.upper(),
     })
+    # Övriga rader som ändrar antal aktier (split, flytt, byte, tilldelning …) blir JUSTERING
+    adj = out["kind"].isna() & out["qraw"].fillna(0).ne(0) & ((out["isin"] != "") | (out["name"] != ""))
+    out.loc[adj, "kind"] = "JUSTERING"
+    out["quantity"] = out["qraw"].abs()
+    out.loc[adj, "quantity"] = out.loc[adj, "qraw"]
+    out["adj"] = ""
     stats = {"rows": len(out)}
     ignored = out[out["kind"].isna()]["type_text"].value_counts()
     stats["ignored"] = ignored.to_dict()
 
     # Källskatt -> avgift på utdelningen samma dag för samma värdepapper
     wht = out[out["kind"] == "KÄLLSKATT"]
-    tx = out[out["kind"].isin(["KÖP", "SÄLJ", "UTDELNING"])].copy()
-    tx = tx[tx["date"].notna() & (tx["quantity"] > 0)]
+    tx = out[out["kind"].isin(["KÖP", "SÄLJ", "UTDELNING", "JUSTERING"])].copy()
+    tx = tx[tx["date"].notna() & tx["quantity"].fillna(0).ne(0)]
+    # Split/sammanläggning: + och − samma dag för samma värdepapper -> en nettorad
+    j = tx[tx["kind"] == "JUSTERING"]
+    keep = tx[tx["kind"] != "JUSTERING"]
+    merged = []
+    for (_, _, _, _), g in j.groupby(["date", "account", "isin", "name"], dropna=False):
+        row = g.iloc[0].copy()
+        if (g["quantity"] > 0).any() and (g["quantity"] < 0).any():
+            row["quantity"] = g["quantity"].sum()
+            row["adj"] = "split"
+            row["price"] = 0.0
+            if abs(row["quantity"]) < 1e-9:
+                continue
+            merged.append(row)
+        else:
+            for _, r in g.iterrows():
+                r = r.copy()
+                r["adj"] = "flytt"
+                merged.append(r)
+    tx = pd.concat([keep, pd.DataFrame(merged)], ignore_index=True) if merged else keep
+    stats["adjustments"] = len(merged)
     tx["fee"] = 0.0
     tx.loc[tx["kind"].isin(["KÖP", "SÄLJ"]), "fee"] = tx["courtage"]
     for r in wht.itertuples():

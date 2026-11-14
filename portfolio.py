@@ -31,7 +31,10 @@ def validate(tx: pd.DataFrame) -> list[str]:
             errors.append(f"Rad {row}: okänd typ '{r['type']}'")
         if pd.isna(pd.to_datetime(r["date"], errors="coerce")):
             errors.append(f"Rad {row}: ogiltigt datum '{r['date']}'")
-        if not (pd.notna(r["quantity"]) and r["quantity"] > 0):
+        if r["type"] == "JUSTERING":
+            if not (pd.notna(r["quantity"]) and r["quantity"] != 0):
+                errors.append(f"Rad {row}: antal får inte vara 0 för justering")
+        elif not (pd.notna(r["quantity"]) and r["quantity"] > 0):
             errors.append(f"Rad {row}: antal måste vara > 0")
         if not (pd.notna(r["price"]) and r["price"] >= 0):
             errors.append(f"Rad {row}: kurs måste vara ≥ 0")
@@ -48,7 +51,13 @@ def validate(tx: pd.DataFrame) -> list[str]:
             if r.quantity > h + 1e-9:
                 errors.append(f"{r.date} {r.ticker} ({r.account}): säljer {r.quantity:g} men innehar bara {h:g}")
             holdings[key] = max(h - r.quantity, 0.0)
+        elif r.type == "JUSTERING":
+            holdings[key] = max(h + r.quantity, 0.0)
     return errors
+
+
+def is_oversell_error(msg: str) -> bool:
+    return "men innehar bara" in msg
 
 
 def _with_account(tx: pd.DataFrame) -> pd.DataFrame:
@@ -96,6 +105,25 @@ def _book(tx: pd.DataFrame):
                 b["qty"] = b["cost_sek"] = b["cost_local"] = 0.0
         elif r.type == "UTDELNING":
             b["dividends_sek"] += r.quantity * r.price * fx - fee
+        elif r.type == "JUSTERING":
+            # Split/sammanläggning: antalet ändras men anskaffningsvärdet är detsamma.
+            # Flytt in: aktier läggs till (med kurs som anskaffningspris om angiven).
+            # Flytt ut: anskaffningsvärdet följer med proportionellt, ingen vinst/förlust.
+            is_split = "split" in str(r.note).lower()
+            if r.quantity > 0:
+                if not is_split:
+                    b["cost_sek"] += r.quantity * r.price * fx + fee
+                    b["cost_local"] += r.quantity * r.price + fee / fx
+                b["qty"] += r.quantity
+            else:
+                q = min(-r.quantity, b["qty"])
+                if not is_split and b["qty"] > 0:
+                    share = q / b["qty"]
+                    b["cost_sek"] -= b["cost_sek"] * share
+                    b["cost_local"] -= b["cost_local"] * share
+                b["qty"] -= q
+                if b["qty"] < 1e-9:
+                    b["qty"] = b["cost_sek"] = b["cost_local"] = 0.0
     return list(book.values()), events
 
 
@@ -162,8 +190,24 @@ def portfolio_history(tx: pd.DataFrame, closes: pd.DataFrame, fx_hist: pd.DataFr
     tx = tx.copy()
     tx["date"] = pd.to_datetime(tx["date"])
     tx["fx"] = tx["fx_rate"].where(tx["fx_rate"] > 0, 1.0)
-    sign = tx["type"].map({"KÖP": 1, "SÄLJ": -1}).fillna(0)
-    tx["signed_qty"] = sign * tx["quantity"]
+    # Effektiv antalsförändring per rad – sälj/flytt ut kan aldrig ta antalet under noll
+    tx = _with_account(tx).sort_values("date", kind="stable")
+    held: dict[tuple, float] = {}
+    eff = []
+    for r in tx.itertuples(index=False):
+        key = (r.account, r.ticker)
+        h = held.get(key, 0.0)
+        if r.type == "KÖP":
+            d = r.quantity
+        elif r.type == "SÄLJ":
+            d = -min(r.quantity, h)
+        elif r.type == "JUSTERING":
+            d = r.quantity if r.quantity > 0 else -min(-r.quantity, h)
+        else:
+            d = 0.0
+        held[key] = h + d
+        eff.append(d)
+    tx["signed_qty"] = eff
 
     idx = pd.bdate_range(tx["date"].min(), pd.Timestamp.today().normalize())
     if len(idx) < 2:

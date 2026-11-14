@@ -8,7 +8,7 @@ import pandas as pd
 
 DB_PATH = Path(__file__).resolve().parent / "data" / "portfolio.db"
 
-TYPES = ["KÖP", "SÄLJ", "UTDELNING"]
+TYPES = ["KÖP", "SÄLJ", "UTDELNING", "JUSTERING"]  # JUSTERING = split/flytt, ändrar antal utan pengar
 CURRENCIES = ["SEK", "USD", "EUR", "NOK", "DKK", "GBP", "CAD", "CHF"]
 COLUMNS = ["id", "date", "account", "ticker", "type", "quantity", "price", "fee", "currency", "fx_rate", "note"]
 
