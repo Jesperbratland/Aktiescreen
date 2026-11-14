@@ -25,15 +25,20 @@ def render():
     st.title("📊 Portföljöversikt")
     tx = db.load_transactions()
     if tx.empty:
-        st.info("Du har inga innehav ännu. Lägg in det du äger under **Konton & innehav**, "
-                "eller ladda en exempelportfölj för att testa.")
-        if st.button("Ladda exempelportfölj", type="primary"):
+        st.info("Du har inga aktier inlagda ännu.")
+        a, b, _ = st.columns([1, 1, 2])
+        if a.button("➕ Lägg in mina aktier", type="primary", use_container_width=True):
+            st.switch_page(st.session_state["_pages"]["konton"])
+        if b.button("Visa exempelportfölj", use_container_width=True):
             db.load_demo()
             st.rerun()
         return
 
-    if (tx["note"] == "Demo").any():
-        st.info("🎁 Du tittar på **exempelaktier**. Lägg in dina egna under **Konton & innehav**.")
+    if tx["note"].str.startswith("Demo").any():
+        a, b = st.columns([4, 1])
+        a.info("🎁 Du tittar på **exempelaktier**. Lägg in dina egna så försvinner de.")
+        if b.button("➕ Lägg in mina aktier", type="primary", use_container_width=True):
+            st.switch_page(st.session_state["_pages"]["konton"])
     accs = sorted(tx["account"].unique())
     if len(accs) > 1:
         choice = st.segmented_control("Konto", ["Alla konton", *accs], default="Alla konton")

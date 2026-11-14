@@ -22,7 +22,7 @@ def render():
     tx = db.load_transactions()
     accounts = db.load_accounts()
     if tx.empty:
-        st.info("Lägg in dina innehav under **Konton & innehav** först.")
+        st.info("Lägg in dina innehav under **Mitt innehav** först.")
         return
     acc_type = dict(zip(accounts["name"], accounts["type"]))
     tx = tx.assign(acc_type=tx["account"].map(acc_type).fillna("ISK"))
@@ -48,7 +48,7 @@ MONTHS = {1: "jan", 4: "apr", 7: "jul", 10: "okt"}
 def _isk(tx: pd.DataFrame, accounts: pd.DataFrame, year: int):
     isk_tx = tx[tx["acc_type"].isin(["ISK", "KF"])]
     if isk_tx.empty:
-        st.info("Du har inga ISK- eller KF-konton med innehav. Ställ in kontotyp under **Konton & innehav**.")
+        st.info("Du har inga ISK- eller KF-konton med innehav. Ställ in kontotyp under **Mitt innehav**.")
         return
 
     slr, fri, known = tax.rules_for(year)
@@ -114,7 +114,7 @@ def _isk(tx: pd.DataFrame, accounts: pd.DataFrame, year: int):
 def _af(tx: pd.DataFrame, year: int):
     af_tx = tx[tx["acc_type"] == "AF"]
     if af_tx.empty:
-        st.info("Du har inga AF-konton (depå). Ställ in kontotyp under **Konton & innehav**.")
+        st.info("Du har inga AF-konton (depå). Ställ in kontotyp under **Mitt innehav**.")
         return
     ev = portfolio.realized_events(af_tx.drop(columns="acc_type"))
     ev = ev[pd.to_datetime(ev["date"]).dt.year == year] if not ev.empty else ev

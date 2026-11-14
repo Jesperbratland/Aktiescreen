@@ -20,7 +20,7 @@ inject_css()
 
 pages = {
     "oversikt": st.Page(overview.render, title="Översikt", icon="📊", url_path="oversikt", default=True),
-    "konton": st.Page(konton.render, title="Konton & innehav", icon="🏦", url_path="konton"),
+    "konton": st.Page(konton.render, title="Mitt innehav", icon="➕", url_path="konton"),
     "transaktioner": st.Page(transactions.render, title="Transaktioner", icon="🧾", url_path="transaktioner"),
     "skatt": st.Page(skatt.render, title="Skatt & avgifter", icon="🧮", url_path="skatt"),
     "analys": st.Page(stock_analysis.render, title="Aktieanalys", icon="🔬", url_path="analys"),

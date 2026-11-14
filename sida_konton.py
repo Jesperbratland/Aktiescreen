@@ -1,4 +1,4 @@
-"""Konton & innehav: ställ in konton (ISK/KF/AF, mäklare, courtageklass) och mata in nuvarande innehav."""
+"""Mitt innehav: lägg till aktier enkelt, se och ta bort innehav, ställ in konton (ISK/KF/AF, mäklare, courtage)."""
 from __future__ import annotations
 
 import datetime as dt
@@ -6,24 +6,183 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
+import aktielista
 import db
 import fees
 import market
 import portfolio
+from ui import fmt_num, fmt_pct, fmt_sek
 
 
 def render():
-    st.title("🏦 Konton & innehav")
+    st.title("➕ Mitt innehav")
     if msg := st.session_state.pop("flash_konton", None):
         st.success(msg)
-    st.markdown("Här ställer du in **dina konton** och lägger in **det du äger idag**. "
-                "Kontotypen styr hur skatten räknas, och mäklare + courtageklass styr courtaget.")
 
-    tab1, tab2 = st.tabs(["1️⃣ Mina konton", "2️⃣ Lägg in mina innehav"])
+    tab1, tab2, tab3 = st.tabs(["➕ Lägg till aktie", "📋 Mina aktier", "🏦 Mina konton"])
     with tab1:
-        _accounts()
+        _quick_add()
+        with st.expander("📑 Har du många aktier? Lägg till flera på en gång i en tabell"):
+            _holdings()
     with tab2:
-        _holdings()
+        _my_stocks()
+    with tab3:
+        _accounts()
+
+
+# ---------------------------------------------------------------- Snabbt tillägg
+def _quick_add():
+    accounts = db.load_accounts()
+    names = accounts["name"].tolist()
+    tx = db.load_transactions()
+    is_demo = not tx.empty and tx["note"].str.startswith("Demo").any()
+    if is_demo:
+        st.info("🎁 Just nu visas exempelaktier. De tas bort automatiskt när du lägger till din första egna aktie.")
+
+    k = st.session_state.get("qa_n", 0)  # räknare som nollställer fälten efter varje tillägg
+    with st.container(border=True):
+        st.markdown("#### 1. Vilken aktie?")
+        choice = st.selectbox(
+            "Aktie", aktielista.options(), index=None, key=f"qa_pick_{k}", accept_new_options=True,
+            placeholder="Skriv bolagets namn, t.ex. Volvo, Investor, Apple …", label_visibility="collapsed",
+        )
+        ticker = name = None
+        if choice:
+            ticker = aktielista.ticker_from_label(choice)
+            if ticker:
+                name = aktielista.POPULAR[ticker]
+            else:
+                with st.spinner("Söker …"):
+                    res = market.search_ticker(choice)
+                if not res.empty:
+                    res = res[res["Typ"].isin(["EQUITY", "ETF"]) & res["Ticker"].notna()].reset_index(drop=True)
+                if res.empty:
+                    st.warning("Hittade ingen aktie med det namnet. Prova att stava annorlunda eller skriv bara "
+                               "en del av namnet.")
+                    return
+                labels = [f"{r.Namn} · {r.Ticker} ({r.Börs})" for r in res.itertuples()]
+                i = st.radio("Vilken av dessa menar du?", range(len(labels)), format_func=lambda i: labels[i],
+                             key=f"qa_res_{k}")
+                ticker, name = res.loc[i, "Ticker"], res.loc[i, "Namn"]
+        if not ticker:
+            st.caption("💡 Listan innehåller vanliga svenska, nordiska och amerikanska aktier. Finns inte din "
+                       "aktie med – skriv namnet och tryck Enter, så söker appen upp den.")
+            return
+
+        info_cur = None if ticker in aktielista.POPULAR else market.get_info(ticker).get("currency")
+        cur = aktielista.currency_for(ticker, info_cur)
+        quotes = market.get_quotes((ticker,))
+        price = quotes.loc[ticker, "last"] if ticker in quotes.index else float("nan")
+        if pd.isna(price):
+            st.warning(f"Hittar ingen aktuell kurs för {ticker} just nu. Du kan lägga till den ändå.")
+        else:
+            st.markdown(f"✅ **{name}** · {ticker} · senaste kurs **{fmt_num(price, 2)} {cur}**")
+
+        st.markdown("#### 2. Hur många har du och vad betalade du?")
+        c = st.columns(3)
+        last_acc = st.session_state.get("qa_last_acc")
+        account = c[0].selectbox("Konto", names, index=names.index(last_acc) if last_acc in names else 0,
+                                 key=f"qa_acc_{k}")
+        qty = c[1].number_input("Antal aktier", min_value=0.0, step=1.0, format="%g", key=f"qa_qty_{k}")
+        gav = c[2].number_input(f"GAV per aktie ({cur})", min_value=0.0, step=0.01, format="%.2f", key=f"qa_gav_{k}",
+                                help="Det du har betalat i snitt per aktie. Står som GAV under Innehav i "
+                                     "Avanza- eller Nordnet-appen.")
+        dont_know = st.checkbox("Jag vet inte mitt GAV – använd dagens kurs", key=f"qa_dk_{k}")
+        with st.expander("Mer (valfritt)"):
+            date = st.date_input("Ungefär när köpte du?", dt.date.today(), max_value=dt.date.today(),
+                                 format="YYYY-MM-DD", key=f"qa_date_{k}",
+                                 help="Används för historikgrafen på Översikt.")
+            cost_sek = 0.0
+            if cur != "SEK":
+                cost_sek = st.number_input("Anskaffningsvärde totalt i SEK", min_value=0.0, step=100.0,
+                                           key=f"qa_cost_{k}",
+                                           help="Visar appen vad du betalat i kronor? Fyll i det så blir valutakursen exakt.")
+
+        use_gav = price if dont_know and pd.notna(price) else gav
+        if qty > 0 and pd.notna(price):
+            fx_now = market.get_fx_now((cur,)).get(cur, 1.0) if cur != "SEK" else 1.0
+            val = qty * price * fx_now
+            txt = f"Värde idag ≈ **{fmt_sek(val)}**"
+            if use_gav > 0:
+                diff = price / use_gav - 1
+                txt += f" · {'upp' if diff >= 0 else 'ner'} {fmt_pct(abs(diff), 1, sign=False)} sedan köp"
+            st.markdown(txt)
+
+        if st.button("➕ Lägg till i mitt innehav", type="primary", disabled=qty <= 0, key=f"qa_btn_{k}"):
+            if use_gav <= 0:
+                st.error("Fyll i GAV, eller kryssa i att du inte vet det.")
+                return
+            date_s = date.isoformat()
+            if cur == "SEK":
+                fx = 1.0
+            elif cost_sek > 0:
+                fx = cost_sek / (qty * use_gav)
+            else:
+                fx = market.get_fx_on(cur, date_s) or market.get_fx_now((cur,)).get(cur) or 1.0
+            removed = db.delete_demo() if is_demo else 0
+            already = not tx.empty and ((tx["account"] == account) & (tx["ticker"] == ticker)).any()
+            db.add_transaction(date_s, ticker, "KÖP", qty, use_gav, 0.0, cur, fx, "Ingående innehav", account)
+            msg = f"✅ {name}: {qty:g} st tillagd på {account}."
+            if already:
+                msg += " Du hade redan aktien där – antalet har lagts ihop och GAV räknats om."
+            if removed:
+                msg += " Exempelaktierna är borttagna."
+            st.session_state["flash_konton"] = msg
+            st.session_state["qa_last_acc"] = account
+            st.session_state["qa_n"] = k + 1
+            st.rerun()
+
+
+# ---------------------------------------------------------------- Mina aktier
+def _my_stocks():
+    tx = db.load_transactions()
+    if tx.empty:
+        st.info("Inga aktier inlagda än. Lägg till under **➕ Lägg till aktie**.")
+        return
+    pos = portfolio.compute_positions(tx, by_account=True)
+    pos = pos[pos["qty"] > 0]
+    if pos.empty:
+        st.info("Inga öppna innehav.")
+        return
+    quotes = market.get_quotes(tuple(sorted(pos["ticker"].unique())))
+    fxn = market.get_fx_now(tuple(sorted(set(pos["currency"]) | {"SEK"})))
+    pending = st.session_state.get("qa_delete")
+
+    for acc, g in pos.groupby("account", sort=False):
+        st.markdown(f"#### 🏦 {acc}")
+        head = st.columns([3, 1.2, 1.4, 1.6, 1.4, 0.6])
+        for col, t in zip(head, ["Aktie", "Antal", "GAV", "Värde idag", "Utveckling", ""]):
+            col.caption(t)
+        for r in g.itertuples():
+            price = quotes["last"].get(r.ticker, float("nan"))
+            fx = fxn.get(r.currency, 1.0)
+            value = r.qty * price * fx
+            gav = r.cost_local / r.qty
+            chg = value / r.cost_sek - 1 if r.cost_sek else float("nan")
+            c = st.columns([3, 1.2, 1.4, 1.6, 1.4, 0.6])
+            c[0].markdown(f"**{aktielista.POPULAR.get(r.ticker, r.ticker)}**  \n"
+                          f"<span class='small-muted'>{r.ticker}</span>", unsafe_allow_html=True)
+            c[1].write(f"{r.qty:g}")
+            c[2].write(f"{fmt_num(gav, 2)} {r.currency}")
+            c[3].write(fmt_sek(value))
+            color = "#22C55E" if chg >= 0 else "#EF4444"
+            c[4].markdown(f"<span style='color:{color}'>{fmt_pct(chg)}</span>" if pd.notna(chg) else "–",
+                          unsafe_allow_html=True)
+            if c[5].button("🗑️", key=f"del_{acc}_{r.ticker}", help="Ta bort aktien från kontot"):
+                st.session_state["qa_delete"] = (acc, r.ticker)
+                st.rerun()
+            if pending == (acc, r.ticker):
+                w = st.columns([4, 1, 1])
+                w[0].warning(f"Ta bort **{r.ticker}** från {acc}? Alla dess köp, sälj och utdelningar raderas.")
+                if w[1].button("Ja, ta bort", key=f"yes_{acc}_{r.ticker}", type="primary"):
+                    db.delete_holding(acc, r.ticker)
+                    st.session_state.pop("qa_delete", None)
+                    st.session_state["flash_konton"] = f"{r.ticker} är borttagen från {acc}."
+                    st.rerun()
+                if w[2].button("Avbryt", key=f"no_{acc}_{r.ticker}"):
+                    st.session_state.pop("qa_delete", None)
+                    st.rerun()
+    st.caption("Vill du ändra antal eller GAV? Ta bort aktien och lägg till den igen – eller redigera under **Transaktioner**.")
 
 
 # ---------------------------------------------------------------- Konton
@@ -113,14 +272,9 @@ def _holdings():
     accounts = db.load_accounts()
     names = accounts["name"].tolist()
     tx = db.load_transactions()
-    is_demo = not tx.empty and (tx["note"] == "Demo").any()
+    is_demo = not tx.empty and tx["note"].str.startswith("Demo").any()
 
-    st.markdown(
-        "Skriv in **det du äger idag** – en rad per aktie och konto. Du hittar uppgifterna under "
-        "**Innehav** i din Avanza- eller Nordnet-app."
-    )
-    if is_demo:
-        st.info("🎁 Appen innehåller just nu **exempelaktier**. Välj *Ersätt allt* nedan så tas de bort.")
+    st.markdown("En rad per aktie och konto. Tickern måste vara i Yahoo-format, t.ex. VOLV-B.ST.")
 
     with st.expander("🔎 Hitta rätt ticker"):
         q = st.text_input("Sök på bolagsnamn", placeholder="t.ex. Volvo, Investor, Apple", key="hold_search")
@@ -200,23 +354,3 @@ def _holdings():
         db.replace_all(combined)
         st.session_state["flash_konton"] = f"Sparade {len(new)} innehav. " + " ".join(notes)
         st.rerun()
-
-    # Nuvarande innehav per konto
-    if not tx.empty:
-        st.divider()
-        st.subheader("Det här finns inlagt nu")
-        pos = portfolio.compute_positions(tx, by_account=True)
-        pos = pos[pos["qty"] > 0]
-        if pos.empty:
-            st.caption("Inga öppna innehav.")
-        else:
-            show = pos[["account", "ticker", "qty", "currency", "cost_sek"]].assign(
-                gav=pos["cost_local"] / pos["qty"])
-            st.dataframe(show, hide_index=True, use_container_width=True, column_config={
-                "account": "Konto", "ticker": "Ticker",
-                "qty": st.column_config.NumberColumn("Antal", format="%.4g"),
-                "currency": "Valuta",
-                "cost_sek": st.column_config.NumberColumn("Anskaffning (SEK)", format="%.0f"),
-                "gav": st.column_config.NumberColumn("GAV", format="%.2f"),
-            })
-            st.caption("Vill du ändra eller ta bort något? Gå till **Transaktioner** – där kan du redigera allt.")

@@ -128,6 +128,18 @@ def replace_all(df: pd.DataFrame) -> None:
             conn.execute("INSERT INTO accounts (name) VALUES (?)", (acc,))
 
 
+def delete_demo() -> int:
+    """Tar bort exempeltransaktionerna. Returnerar antal borttagna."""
+    with _conn() as conn:
+        return conn.execute("DELETE FROM transactions WHERE note LIKE 'Demo%'").rowcount
+
+
+def delete_holding(account: str, ticker: str) -> None:
+    """Tar bort alla transaktioner för en aktie på ett konto."""
+    with _conn() as conn:
+        conn.execute("DELETE FROM transactions WHERE account = ? AND ticker = ?", (account, ticker))
+
+
 def delete_all() -> None:
     with _conn() as conn:
         conn.execute("DELETE FROM transactions")
@@ -142,9 +154,9 @@ def load_demo() -> None:
         ("2023-08-01", "MSFT", "KÖP", 10, 336.0, 49, "USD", 10.55, "Demo"),
         ("2023-10-12", "ATCO-A.ST", "KÖP", 80, 142.0, 39, "SEK", 1.0, "Demo"),
         ("2024-01-18", "NOVO-B.CO", "KÖP", 15, 720.0, 49, "DKK", 1.52, "Demo"),
-        ("2024-04-05", "VOLV-B.ST", "UTDELNING", 100, 18.0, 0, "SEK", 1.0, "Ord + extra"),
-        ("2024-05-02", "INVE-B.ST", "UTDELNING", 50, 4.8, 0, "SEK", 1.0, ""),
-        ("2024-06-14", "VOLV-B.ST", "SÄLJ", 40, 280.0, 49, "SEK", 1.0, "Vinsthemtagning"),
+        ("2024-04-05", "VOLV-B.ST", "UTDELNING", 100, 18.0, 0, "SEK", 1.0, "Demo – utdelning"),
+        ("2024-05-02", "INVE-B.ST", "UTDELNING", 50, 4.8, 0, "SEK", 1.0, "Demo – utdelning"),
+        ("2024-06-14", "VOLV-B.ST", "SÄLJ", 40, 280.0, 49, "SEK", 1.0, "Demo – vinsthemtagning"),
         ("2024-09-03", "EVO.ST", "KÖP", 15, 1050.0, 49, "SEK", 1.0, "Demo"),
         ("2025-02-20", "AAPL", "KÖP", 10, 245.0, 49, "USD", 10.70, "Demo"),
     ], columns=["date", "ticker", "type", "quantity", "price", "fee", "currency", "fx_rate", "note"])
