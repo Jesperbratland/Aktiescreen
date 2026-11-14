@@ -6,7 +6,7 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
-import db, market, portfolio
+import db, fees, market, portfolio
 from ui import fmt_sek
 
 
@@ -35,19 +35,25 @@ def render():
 
 def _add_form():
     st.subheader("Ny transaktion")
+    accounts = db.load_accounts()
     with st.form("add_tx", clear_on_submit=True):
-        c = st.columns(4)
-        date = c[0].date_input("Datum", value=dt.date.today(), max_value=dt.date.today(), format="YYYY-MM-DD")
-        ticker = c[1].text_input("Ticker", placeholder="VOLV-B.ST").strip().upper()
-        type_ = c[2].selectbox("Typ", db.TYPES)
-        currency = c[3].selectbox("Valuta", db.CURRENCIES)
+        c = st.columns(5)
+        account = c[0].selectbox("Konto", accounts["name"].tolist())
+        date = c[1].date_input("Datum", value=dt.date.today(), max_value=dt.date.today(), format="YYYY-MM-DD")
+        ticker = c[2].text_input("Ticker", placeholder="VOLV-B.ST").strip().upper()
+        type_ = c[3].selectbox("Typ", db.TYPES)
+        currency = c[4].selectbox("Valuta", db.CURRENCIES)
         c = st.columns(4)
         qty = c[0].number_input("Antal", min_value=0.0, step=1.0, format="%.4f")
         price = c[1].number_input("Kurs / utdelning per aktie", min_value=0.0, step=0.01, format="%.4f")
-        fee = c[2].number_input("Courtage / källskatt (SEK)", min_value=0.0, step=1.0)
+        fee = c[2].number_input("Courtage / källskatt (SEK)", min_value=0.0, step=1.0,
+                                help="Lämnas 0 och 'Räkna courtage automatiskt' är ikryssat räknas det ut från kontots courtageklass.")
         fx = c[3].number_input("Valutakurs (SEK)", min_value=0.0, step=0.0001, format="%.4f",
                                help="Lämna 0 för att hämta automatiskt för datumet. Ignoreras för SEK.")
-        note = st.text_input("Anteckning", placeholder="Valfritt – t.ex. investeringscase")
+        c = st.columns([3, 2])
+        note = c[0].text_input("Anteckning", placeholder="Valfritt – t.ex. investeringscase")
+        auto_fee = c[1].checkbox("Räkna courtage automatiskt", value=True,
+                                 help="Används vid köp/sälj när avgiften är 0. Inkluderar 0,25 % valutaväxling för utländska aktier.")
         submitted = st.form_submit_button("Spara transaktion", type="primary")
 
     if not submitted:
@@ -62,7 +68,15 @@ def _add_form():
         if fx is None:
             st.error(f"Kunde inte hämta {currency}/SEK för {date}. Ange valutakursen manuellt.")
             return
-    new = pd.DataFrame([{"id": 10**9, "date": date.isoformat(), "ticker": ticker, "type": type_,
+    fee_note = ""
+    if auto_fee and fee == 0 and type_ in ("KÖP", "SÄLJ"):
+        a = accounts.set_index("name").loc[account]
+        f = fees.calc_fees(qty * price * fx, a["broker"], a["courtage_class"], currency != "SEK",
+                           a["custom_pct"], a["custom_min"])
+        fee = f["total"]
+        fee_note = f" · avgift {fmt_sek(fee, 2)} ({a['broker']} {a['courtage_class']}" + \
+            (f", varav växling {fmt_sek(f['fx_fee'], 2)})" if f["fx_fee"] else ")")
+    new = pd.DataFrame([{"id": 10**9, "date": date.isoformat(), "account": account, "ticker": ticker, "type": type_,
                          "quantity": qty, "price": price, "fee": fee, "currency": currency,
                          "fx_rate": fx, "note": note}])
     combined = pd.concat([db.load_transactions(), new], ignore_index=True)
@@ -70,9 +84,9 @@ def _add_form():
     if errors:
         st.error("\n".join(errors))
         return
-    db.add_transaction(date.isoformat(), ticker, type_, qty, price, fee, currency, fx, note)
+    db.add_transaction(date.isoformat(), ticker, type_, qty, price, fee, currency, fx, note, account)
     amount = qty * price * fx
-    st.session_state["flash"] = f"Sparat: {type_} {qty:g} {ticker} à {price:g} {currency} ≈ {fmt_sek(amount)}"
+    st.session_state["flash"] = f"Sparat på {account}: {type_} {qty:g} {ticker} à {price:g} {currency} ≈ {fmt_sek(amount)}{fee_note}"
     st.rerun()
 
 
@@ -83,11 +97,19 @@ def _editor():
         st.caption("Inga transaktioner ännu.")
         return
 
-    f1, f2 = st.columns([2, 1])
+    f0, f1, f2 = st.columns([1.5, 2, 1])
+    accs = f0.multiselect("Filtrera konto", sorted(tx["account"].unique()))
     tickers = f1.multiselect("Filtrera ticker", sorted(tx["ticker"].unique()))
     types = f2.multiselect("Filtrera typ", db.TYPES)
-    if tickers or types:
-        view = tx[(tx["ticker"].isin(tickers) if tickers else True) & (tx["type"].isin(types) if types else True)]
+    if tickers or types or accs:
+        m = pd.Series(True, index=tx.index)
+        if accs:
+            m &= tx["account"].isin(accs)
+        if tickers:
+            m &= tx["ticker"].isin(tickers)
+        if types:
+            m &= tx["type"].isin(types)
+        view = tx[m]
         st.dataframe(view.drop(columns="id"), hide_index=True, use_container_width=True)
         st.caption("Ta bort filtren för att redigera.")
         return
@@ -99,6 +121,8 @@ def _editor():
         key="tx_editor",
         column_config={
             "date": st.column_config.DateColumn("Datum", format="YYYY-MM-DD", required=True),
+            "account": st.column_config.SelectboxColumn("Konto", options=db.account_names(), required=True,
+                                                        default=db.account_names()[0]),
             "ticker": st.column_config.TextColumn("Ticker", required=True),
             "type": st.column_config.SelectboxColumn("Typ", options=db.TYPES, required=True),
             "quantity": st.column_config.NumberColumn("Antal", min_value=0, format="%.4f", required=True),
@@ -160,7 +184,7 @@ def _import_export():
         st.download_button("⬇️ Exportera CSV", tx.drop(columns="id").to_csv(index=False).encode("utf-8"),
                            file_name=f"transaktioner_{dt.date.today()}.csv", mime="text/csv",
                            disabled=tx.empty)
-        st.caption("Kolumner: date, ticker, type, quantity, price, fee, currency, fx_rate, note")
+        st.caption("Kolumner: date, account, ticker, type, quantity, price, fee, currency, fx_rate, note")
     with c2:
         up = st.file_uploader("Importera CSV", type="csv")
         mode = st.radio("Läge", ["Lägg till", "Ersätt allt"], horizontal=True)
@@ -174,7 +198,8 @@ def _import_export():
             if not required.issubset(new.columns):
                 st.error(f"CSV måste innehålla kolumnerna: {', '.join(sorted(required))}")
                 return
-            for col, default in (("fee", 0.0), ("currency", "SEK"), ("fx_rate", 1.0), ("note", "")):
+            for col, default in (("fee", 0.0), ("currency", "SEK"), ("fx_rate", 1.0), ("note", ""),
+                                 ("account", db.account_names()[0])):
                 if col not in new:
                     new[col] = default
             new["ticker"] = new["ticker"].astype(str).str.strip().str.upper()

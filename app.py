@@ -9,6 +9,8 @@ st.set_page_config(page_title="Aktiescreen", page_icon="🎄", layout="wide",
 
 from ui import JULTEMA, christmas_greeting, inject_christmas, inject_css  # noqa: E402
 import sida_analys as stock_analysis  # noqa: E402
+import sida_konton as konton  # noqa: E402
+import sida_skatt as skatt  # noqa: E402
 import sida_oversikt as overview  # noqa: E402
 import sida_screener as screener_page  # noqa: E402
 import sida_tips as tips  # noqa: E402
@@ -18,7 +20,9 @@ inject_css()
 
 pages = {
     "oversikt": st.Page(overview.render, title="Översikt", icon="📊", url_path="oversikt", default=True),
+    "konton": st.Page(konton.render, title="Konton & innehav", icon="🏦", url_path="konton"),
     "transaktioner": st.Page(transactions.render, title="Transaktioner", icon="🧾", url_path="transaktioner"),
+    "skatt": st.Page(skatt.render, title="Skatt & avgifter", icon="🧮", url_path="skatt"),
     "analys": st.Page(stock_analysis.render, title="Aktieanalys", icon="🔬", url_path="analys"),
     "screener": st.Page(screener_page.render, title="Screener", icon="🧭", url_path="screener"),
     "tips": st.Page(tips.render, title="Tips & insikter", icon="💡", url_path="tips"),
@@ -26,7 +30,7 @@ pages = {
 st.session_state["_pages"] = pages
 
 nav = st.navigation({
-    "Portfölj": [pages["oversikt"], pages["transaktioner"]],
+    "Portfölj": [pages["oversikt"], pages["konton"], pages["transaktioner"], pages["skatt"]],
     "Analys": [pages["analys"], pages["screener"], pages["tips"]],
 })
 

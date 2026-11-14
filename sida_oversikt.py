@@ -10,8 +10,7 @@ import db, market, portfolio
 from ui import ACCENT, NEG, POS, fmt_pct, fmt_sek
 
 
-def _load_portfolio():
-    tx = db.load_transactions()
+def _load_portfolio(tx):
     pos = portfolio.compute_positions(tx)
     open_pos = pos[pos["qty"] > 0]
     tickers = tuple(sorted(open_pos["ticker"]))
@@ -26,15 +25,23 @@ def render():
     st.title("📊 Portföljöversikt")
     tx = db.load_transactions()
     if tx.empty:
-        st.info("Du har inga transaktioner ännu. Lägg till dina köp/sälj under **Transaktioner**, "
+        st.info("Du har inga innehav ännu. Lägg in det du äger under **Konton & innehav**, "
                 "eller ladda en exempelportfölj för att testa.")
         if st.button("Ladda exempelportfölj", type="primary"):
             db.load_demo()
             st.rerun()
         return
 
+    if (tx["note"] == "Demo").any():
+        st.info("🎁 Du tittar på **exempelaktier**. Lägg in dina egna under **Konton & innehav**.")
+    accs = sorted(tx["account"].unique())
+    if len(accs) > 1:
+        choice = st.segmented_control("Konto", ["Alla konton", *accs], default="Alla konton")
+        if choice and choice != "Alla konton":
+            tx = tx[tx["account"] == choice]
+
     with st.spinner("Hämtar kurser…"):
-        tx, pos, hold = _load_portfolio()
+        tx, pos, hold = _load_portfolio(tx)
 
     value = hold["value_sek"].sum() if not hold.empty else 0.0
     cost = hold["cost_sek"].sum() if not hold.empty else 0.0

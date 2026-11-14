@@ -37,28 +37,40 @@ def validate(tx: pd.DataFrame) -> list[str]:
             errors.append(f"Rad {row}: kurs måste vara ≥ 0")
     if errors:
         return errors
-    holdings: dict[str, float] = {}
-    srt = tx.assign(_d=pd.to_datetime(tx["date"])).sort_values(["_d"], kind="stable")
+    holdings: dict[tuple, float] = {}
+    srt = _with_account(tx).assign(_d=pd.to_datetime(tx["date"])).sort_values(["_d"], kind="stable")
     for r in srt.itertuples(index=False):
-        h = holdings.get(r.ticker, 0.0)
+        key = (r.account, r.ticker)
+        h = holdings.get(key, 0.0)
         if r.type == "KÖP":
-            holdings[r.ticker] = h + r.quantity
+            holdings[key] = h + r.quantity
         elif r.type == "SÄLJ":
             if r.quantity > h + 1e-9:
-                errors.append(f"{r.date} {r.ticker}: säljer {r.quantity:g} men innehar bara {h:g}")
-            holdings[r.ticker] = max(h - r.quantity, 0.0)
+                errors.append(f"{r.date} {r.ticker} ({r.account}): säljer {r.quantity:g} men innehar bara {h:g}")
+            holdings[key] = max(h - r.quantity, 0.0)
     return errors
 
 
-def compute_positions(tx: pd.DataFrame) -> pd.DataFrame:
-    """En rad per ticker (även stängda innehav)."""
-    if tx.empty:
-        return pd.DataFrame(columns=POSITION_COLS)
-    tx = tx.assign(_d=pd.to_datetime(tx["date"])).sort_values(["_d", "id"], kind="stable")
-    book: dict[str, dict] = {}
+def _with_account(tx: pd.DataFrame) -> pd.DataFrame:
+    if "account" not in tx:
+        return tx.assign(account="Mitt ISK")
+    return tx.assign(account=tx["account"].fillna("Mitt ISK"))
+
+
+def _book(tx: pd.DataFrame):
+    """Går igenom transaktionerna per (konto, ticker) med genomsnittsmetoden.
+
+    Returnerar (positioner per konto/ticker, lista med realiserade försäljningar).
+    """
+    tx = _with_account(tx)
+    if "id" not in tx:
+        tx = tx.assign(id=range(len(tx)))
+    tx = tx.assign(dt_=pd.to_datetime(tx["date"])).sort_values(["dt_", "id"], kind="stable")
+    book: dict[tuple, dict] = {}
+    events: list[dict] = []
     for r in tx.itertuples(index=False):
-        b = book.setdefault(r.ticker, {
-            "ticker": r.ticker, "currency": r.currency, "qty": 0.0, "cost_sek": 0.0,
+        b = book.setdefault((r.account, r.ticker), {
+            "account": r.account, "ticker": r.ticker, "currency": r.currency, "qty": 0.0, "cost_sek": 0.0,
             "cost_local": 0.0, "realized_sek": 0.0, "dividends_sek": 0.0, "fees_sek": 0.0,
             "first_date": r.date,
         })
@@ -75,6 +87,8 @@ def compute_positions(tx: pd.DataFrame) -> pd.DataFrame:
             basis_sek = b["cost_sek"] * share
             proceeds = r.quantity * r.price * fx - fee
             b["realized_sek"] += proceeds - basis_sek
+            events.append({"date": r.dt_, "account": r.account, "ticker": r.ticker, "quantity": r.quantity,
+                           "proceeds_sek": proceeds, "basis_sek": basis_sek, "gain_sek": proceeds - basis_sek})
             b["cost_sek"] -= basis_sek
             b["cost_local"] -= b["cost_local"] * share
             b["qty"] -= q
@@ -82,7 +96,32 @@ def compute_positions(tx: pd.DataFrame) -> pd.DataFrame:
                 b["qty"] = b["cost_sek"] = b["cost_local"] = 0.0
         elif r.type == "UTDELNING":
             b["dividends_sek"] += r.quantity * r.price * fx - fee
-    return pd.DataFrame(book.values(), columns=POSITION_COLS)
+    return list(book.values()), events
+
+
+def compute_positions(tx: pd.DataFrame, by_account: bool = False) -> pd.DataFrame:
+    """En rad per ticker (även stängda innehav). by_account=True ger en rad per konto och ticker."""
+    cols = (["account"] if by_account else []) + POSITION_COLS
+    if tx.empty:
+        return pd.DataFrame(columns=cols)
+    rows, _ = _book(tx)
+    df = pd.DataFrame(rows)
+    if by_account:
+        return df[cols]
+    agg = df.groupby("ticker", as_index=False, sort=False).agg(
+        currency=("currency", "first"), qty=("qty", "sum"), cost_sek=("cost_sek", "sum"),
+        cost_local=("cost_local", "sum"), realized_sek=("realized_sek", "sum"),
+        dividends_sek=("dividends_sek", "sum"), fees_sek=("fees_sek", "sum"), first_date=("first_date", "min"))
+    return agg[POSITION_COLS]
+
+
+def realized_events(tx: pd.DataFrame) -> pd.DataFrame:
+    """En rad per försäljning med vinst/förlust enligt genomsnittsmetoden (underlag för K4)."""
+    cols = ["date", "account", "ticker", "quantity", "proceeds_sek", "basis_sek", "gain_sek"]
+    if tx.empty:
+        return pd.DataFrame(columns=cols)
+    _, events = _book(tx)
+    return pd.DataFrame(events, columns=cols)
 
 
 def enrich_positions(pos: pd.DataFrame, quotes: pd.DataFrame, fx_now: dict[str, float]) -> pd.DataFrame:
