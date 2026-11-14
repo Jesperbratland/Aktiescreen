@@ -17,6 +17,7 @@ Appen öppnas på http://localhost:8501. Klicka **Ladda exempelportfölj** på �
 
 | Sida | Innehåll |
 |---|---|
+| **🐺 Fråga Vargen** | AI-aktieexpert (påhittad mäklarkaraktär, drivs av Claude) som ser din portfölj och hämtar kurser, nyckeltal och signaler. Kräver `ANTHROPIC_API_KEY` i Streamlit Secrets; sätt även `APP_PASSWORD`. |
 | **Översikt** | Marknadsvärde, dagens förändring, orealiserat/realiserat resultat, utdelningar. Fördelning per innehav/valuta/sektor. Värde vs insatt kapital. Tidsviktad avkastning (TWR) mot OMXS30, S&P 500 m.fl. |
 | **Mitt innehav** | **Importera alla affärer från Avanza** (CSV-export) med exakt GAV, courtage och valutakurser. Lägg till aktier genom att skriva bolagsnamnet – ticker och valuta hittas automatiskt. Lista över dina aktier per konto med ta bort-knapp. **Pengar för köp** per konto (sätt in, ta ut, ange saldo) som uppdateras automatiskt vid köp, sälj och utdelning. Konton (ISK, KF, AF), mäklare och courtageklass. |
 | **Skatt & avgifter** | Uppskattad ISK/KF-schablonskatt (kvartalsvärden, 300 000 kr fribelopp 2026), skatt på vinster/utdelningar på AF med K4-underlag, courtage och valutaväxling, tips om courtageklass samt jämförelse ISK vs AF. |
