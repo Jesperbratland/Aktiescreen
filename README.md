@@ -26,6 +26,10 @@ Appen öppnas på http://localhost:8501. Klicka **Ladda exempelportfölj** på �
 | **Screener** | Färdiga urval (Sverige large/mid cap, Norden, USA) eller egen lista. Filter på P/E, direktavkastning, ROE, RSI, momentum, MA200, sektor. Viktbar poäng för Värde / Kvalitet / Momentum / Utdelning. |
 | **Tips & insikter** | Portföljhälsa (koncentration, sektor, valuta, stora förlorare/vinnare), tekniska signaler på dina innehav och aktieidéer enligt fyra strategier. |
 
+## Inloggning
+
+Appen kan låsas med en engångskod (4 siffror som standard) som mejlas till ägaren. Lägg in `AUTH_EMAIL`, `SMTP_USER` och `SMTP_PASSWORD` (Gmail-app-lösenord) i Streamlit Secrets. Max 3 försök per kod, max 5 koder per timme och låsning i 24 timmar efter 8 felaktiga försök. Se `auth.py`.
+
 ## Kurser
 
 Välj kurskälla i sidomenyn. *Avanza* hämtar realtidskurser för nordiska aktier från Avanzas öppna, inofficiella webbtjänst (ingen inloggning). Svarar den inte används Yahoo Finance automatiskt. Historik och nyckeltal kommer alltid från Yahoo.

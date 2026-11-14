@@ -7,6 +7,7 @@ import streamlit as st
 st.set_page_config(page_title="Aktiescreen", page_icon="🎄", layout="wide",
                    initial_sidebar_state="expanded")
 
+import auth  # noqa: E402
 import market  # noqa: E402
 from ui import JULTEMA, christmas_greeting, inject_christmas, inject_css  # noqa: E402
 import sida_analys as stock_analysis  # noqa: E402
@@ -19,6 +20,8 @@ import sida_tips as tips  # noqa: E402
 import sida_transaktioner as transactions  # noqa: E402
 
 inject_css()
+inject_christmas(snow=st.session_state.get("snow", True))
+auth.require_login()  # stoppar här tills rätt kod har angetts
 
 pages = {
     "oversikt": st.Page(overview.render, title="Översikt", icon="📊", url_path="oversikt", default=True),
@@ -55,7 +58,6 @@ with st.sidebar:
     if JULTEMA:
         st.toggle("❄️ Snöfall", value=True, key="snow")
     st.caption("Historik och nyckeltal från Yahoo Finance. Data lagras i data/portfolio.db.")
-
-inject_christmas(snow=st.session_state.get("snow", True))
+    auth.logout_button()
 
 nav.run()
