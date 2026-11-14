@@ -101,12 +101,20 @@ def render():
         current = _current_value()
 
     with st.container(border=True):
-        c = st.columns(4)
+        try:
+            saved_pmt = int(float(db.get_setting("monthly_saving", "2000") or 2000))
+        except ValueError:
+            saved_pmt = 2000
+        c = st.columns(5)
         target = c[0].number_input("🎯 Mål (kr)", 0.0, 1e9, float(saved_amount or 1_000_000), 50_000.0)
         years = c[1].number_input("⏳ Antal år", 1, 60, int(default_years), 1)
         start = c[2].number_input("💼 Startkapital (kr)", 0.0, 1e9, float(round(current, -2)), 10_000.0,
                                   help="Förifyllt med ditt nuvarande portföljvärde inkl. pengar för köp.")
-        preset = c[3].selectbox("📊 Typ av sparande", list(PRESETS), index=2)
+        pmt = c[3].number_input("💰 Jag sparar per månad (kr)", 0, 1_000_000, saved_pmt, 500,
+                                help="Skriv in exakt vad du sparar, eller använd + och −. Sparas till nästa gång.")
+        preset = c[4].selectbox("📊 Typ av sparande", list(PRESETS), index=2)
+        if pmt != saved_pmt:
+            db.set_setting("monthly_saving", pmt)
         with st.expander("⚙️ Justera antaganden"):
             a = st.columns(3)
             r = a[0].slider("Trolig avkastning per år (%)", 0.0, 15.0, PRESETS[preset][0], 0.5,
@@ -120,17 +128,28 @@ def render():
         need_likely = required_monthly(target, start, years, r, vol, fee, 50)
         need_safe = required_monthly(target, start, years, r, vol, fee, 10)
 
-    k = st.columns(3)
-    k[0].metric("Spara per månad – troligt", fmt_sek(np.ceil(need_likely / 100) * 100) if need_likely == need_likely else "–",
-                help="Når målet i hälften av utfallen.")
-    k[1].metric("Spara per månad – säkert", fmt_sek(np.ceil(need_safe / 100) * 100) if need_safe == need_safe else "–",
-                help="Når målet i 9 av 10 utfall.")
-    k[2].metric("Bara insatta pengar", fmt_sek(np.ceil(max(target - start, 0) / (years * 12) / 100) * 100),
-                help="Om pengarna inte växte alls (madrassen).")
+    def _round(x):
+        return np.ceil(x / 100) * 100 if x == x else float("nan")
 
-    default_pmt = int(np.ceil((need_likely if need_likely == need_likely else 0) / 100) * 100)
-    pmt = st.slider("💰 Mitt månadssparande (kr)", 0, max(50_000, default_pmt * 2), default_pmt, 100,
-                    key=f"pmt_{int(target)}_{years}_{int(start)}")
+    st.markdown("##### Så mycket skulle du behöva spara för att nå målet")
+    k = st.columns(3)
+    k[0].metric("Troligt (hälften av utfallen)", fmt_sek(_round(need_likely)),
+                delta=(f"{fmt_sek(pmt - _round(need_likely))} jämfört med ditt sparande") if need_likely == need_likely else None,
+                delta_color="normal")
+    k[1].metric("Säkert (9 av 10 utfall)", fmt_sek(_round(need_safe)),
+                delta=(f"{fmt_sek(pmt - _round(need_safe))} jämfört med ditt sparande") if need_safe == need_safe else None,
+                delta_color="normal")
+    k[2].metric("Om pengarna inte växte alls", fmt_sek(_round(max(target - start, 0) / (years * 12))))
+    if need_likely == need_likely and need_likely > 0:
+        if pmt >= need_safe:
+            st.success(f"💪 Med {fmt_sek(pmt)} i månaden når du målet i minst 9 av 10 utfall.")
+        elif pmt >= need_likely:
+            st.info(f"👍 Med {fmt_sek(pmt)} i månaden når du troligen målet – men inte i alla utfall.")
+        else:
+            st.warning(f"Med {fmt_sek(pmt)} i månaden når du troligen inte målet på {years} år. "
+                       f"Höj till ca {fmt_sek(_round(need_likely))}, förläng tiden eller sänk målet.")
+    elif need_likely == 0:
+        st.success("🎉 Du når troligen målet utan att spara något mer – allt du sparar är bonus!")
 
     sims = simulate(start, pmt, years, r, vol, fee)
     months = sims.shape[1]
