@@ -11,8 +11,8 @@ TOOL_LABELS = {"hamta_portfolj": "📂 Kollar din portfölj", "hamta_aktie": "�
 STARTERS = [
     "Hur ser min portfölj ut – vad är bra och vad är riskabelt?",
     "Vilken av mina aktier är mest övervärderad just nu?",
-    "Analysera Investor B åt mig",
-    "Jag har pengar att köpa för – vad skulle du titta på?",
+    "Vad tycker du om Investor B?",
+    "Jag har pengar att investera – vad ska jag titta på?",
 ]
 
 
@@ -25,8 +25,8 @@ def _secret(name: str) -> str | None:
 
 def render():
     st.title("🐺 Vargen")
-    st.caption("Din AI-aktieexpert – en påhittad mäklarkaraktär som drivs av Claude. Han ser dina innehav och "
-               "hämtar aktuella kurser och nyckeltal. Inte finansiell rådgivning – du fattar besluten.")
+    st.caption("Din aktieexpert – en påhittad mäklarkaraktär. Han ser dina innehav och hämtar aktuella kurser "
+               "och nyckeltal. Inte finansiell rådgivning – du fattar besluten.")
 
     # Lösenordsskydd (rekommenderas eftersom hemsidan är publik och varje fråga kostar API-pengar)
     pw = _secret("APP_PASSWORD")
@@ -39,10 +39,18 @@ def render():
             st.error("Fel lösenord.")
         return
 
-    api_key = _secret("ANTHROPIC_API_KEY") or st.session_state.get("anthropic_key")
-    if not api_key:
-        _setup_guide()
-        return
+    groq_key = _secret("GROQ_API_KEY") or st.session_state.get("groq_key")
+    claude_key = _secret("ANTHROPIC_API_KEY")
+    if groq_key:
+        provider, api_key = "groq", groq_key
+        st.success("🟢 **AI-läge** – gratis via Groq. Prata fritt med Vargen.", icon="🐺")
+    elif claude_key:
+        provider, api_key = "claude", claude_key
+        st.success("🟢 **AI-läge** – Claude.", icon="🐺")
+    else:
+        provider, api_key = "offline", None
+        st.info("🟡 **Grundläge** – helt gratis, ingen AI. Vargen går igenom din portfölj och analyserar aktier "
+                "med appens egna siffror. Vill du kunna prata fritt? Se *Koppla in gratis AI* längst ner.")
 
     msgs = st.session_state.setdefault("vargen_msgs", [])
     if not msgs:
@@ -72,7 +80,7 @@ def render():
                 status.write(f"{TOOL_LABELS.get(name, name)} {arg}".strip())
 
             try:
-                answer = agent.chat(api_key, msgs[-20:], on_tool=on_tool)
+                answer = agent.chat(provider, api_key, msgs[-20:], on_tool=on_tool)
                 status.update(label="Klart", state="complete")
             except Exception as e:
                 status.update(label="Något gick fel", state="error")
@@ -83,39 +91,43 @@ def render():
     if msgs and st.button("🧹 Ny konversation"):
         st.session_state["vargen_msgs"] = []
         st.rerun()
+    if provider == "offline":
+        _setup_guide()
 
 
 def _error_text(e: Exception) -> str:
     text = str(e)
-    if "authentication" in text.lower() or "401" in text:
-        return "⚠️ API-nyckeln fungerar inte. Kontrollera ANTHROPIC_API_KEY i Streamlit Secrets."
-    if "credit" in text.lower() or "billing" in text.lower():
-        return "⚠️ Ditt Anthropic-konto saknar krediter. Fyll på under Billing på console.anthropic.com."
-    if "not_found" in text.lower() or "model" in text.lower():
-        return f"⚠️ Modellen hittades inte ({agent.MODEL}). Be Claude byta modell i agent.py.\n\n`{text[:300]}`"
+    low = text.lower()
+    if "rate_limit" in low or "429" in low:
+        return "⏳ Gratiskvoten är slut för stunden. Vänta en minut (eller till i morgon om dagskvoten är slut)."
+    if "401" in low or "invalid api key" in low or "authentication" in low:
+        return "⚠️ API-nyckeln fungerar inte. Kontrollera GROQ_API_KEY i Streamlit Secrets."
+    if "model" in low and ("not found" in low or "does not exist" in low or "decommissioned" in low):
+        return f"⚠️ AI-modellen finns inte längre ({agent.GROQ_MODEL}). Be Claude byta modell i agent.py."
     return f"⚠️ Något gick fel: `{text[:300]}`"
 
 
 def _setup_guide():
-    st.info("🔑 Vargen behöver en **API-nyckel från Anthropic** för att kunna prata. Det kostar några ören per fråga.")
-    st.markdown(
-        """
-**Så här kopplar du in honom (ca 5 minuter):**
+    with st.expander("🔑 Koppla in gratis AI (ca 3 minuter, inget betalkort)"):
+        st.markdown(
+            """
+Vargen kan drivas av en gratis AI-tjänst som heter **Groq**. Den är gratis upp till ungefär
+1 000 frågor per dag – mer än nog för dig.
 
-1. Gå till **https://console.anthropic.com** och skapa ett konto.
-2. Under **Billing** – lägg in betalkort och fyll på t.ex. 5 dollar.
-3. Under **API Keys** – klicka **Create Key** och kopiera nyckeln (börjar med `sk-ant-`).
-4. Gå till **https://share.streamlit.io**, klicka på **⋮** vid din app → **Settings** → **Secrets**.
-5. Klistra in följande (med din nyckel och ett eget lösenord) och klicka **Save**:
+1. Gå till **https://console.groq.com** och logga in med ditt Google-konto.
+2. Klicka på **API Keys** → **Create API Key**, ge den ett namn (t.ex. *aktiescreen*) och kopiera nyckeln
+   (börjar med `gsk_`). Den visas bara en gång!
+3. Gå till **https://share.streamlit.io**, klicka på **⋮** vid din app → **Settings** → **Secrets**.
+4. Klistra in följande och klicka **Save**:
 ```toml
-ANTHROPIC_API_KEY = "sk-ant-din-nyckel-här"
+GROQ_API_KEY = "gsk_din-nyckel-här"
 APP_PASSWORD = "välj-ett-lösenord"
 ```
-Lösenordet gör att bara du kan prata med Vargen – annars kan vem som helst med länken använda din nyckel.
-        """
-    )
-    with st.expander("Testa direkt utan att spara nyckeln"):
-        key = st.text_input("API-nyckel (sparas bara tills du stänger sidan)", type="password")
-        if key.startswith("sk-ant-"):
-            st.session_state["anthropic_key"] = key
+Lösenordet är valfritt men smart – annars kan vem som helst med länken använda din gratiskvot.
+            """
+        )
+        key = st.text_input("…eller testa direkt (sparas bara tills du stänger sidan)", type="password",
+                            placeholder="gsk_…")
+        if key.startswith("gsk_"):
+            st.session_state["groq_key"] = key
             st.rerun()
