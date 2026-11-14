@@ -24,6 +24,7 @@ Appen öppnas på http://localhost:8501. Klicka **Ladda exempelportfölj** på �
 | **Transaktioner** | Formulär för köp/sälj/utdelning (valutakurs hämtas automatiskt), redigerbar tabell, CSV-import/export, tickersök på bolagsnamn, realiserat resultat per aktie. |
 | **Aktieanalys** | Candlestick med MA20/50/200, Bollinger, RSI, MACD, volym. Dina köp/sälj och ditt GAV i grafen. Avkastning per period, Sharpe, Sortino, max drawdown, beta, nyckeltal, analytikerkonsensus, jämförelse mot andra aktier. |
 | **Screener** | Färdiga urval (Sverige large/mid cap, Norden, USA) eller egen lista. Filter på P/E, direktavkastning, ROE, RSI, momentum, MA200, sektor. Viktbar poäng för Värde / Kvalitet / Momentum / Utdelning. |
+| **Mål & sparkalkyl** | Hur mycket behöver du spara per månad för att nå ett belopp? Diagram med troligt, dåligt och bra utfall (Monte Carlo) samt bara insatta pengar, och chansen att nå målet. |
 | **Tips & insikter** | Portföljhälsa (koncentration, sektor, valuta, stora förlorare/vinnare), tekniska signaler på dina innehav och aktieidéer enligt fyra strategier. |
 
 ## Inloggning
