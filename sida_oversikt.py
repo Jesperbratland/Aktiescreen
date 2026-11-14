@@ -72,6 +72,17 @@ def render():
     c[1].metric("Realiserat", fmt_sek(realized))
     c[2].metric("Utdelningar", fmt_sek(divs))
     c[3].metric("Totalt resultat", fmt_sek(total))
+    try:
+        import sida_bevakning
+        hits = sida_bevakning.alerts()
+    except Exception:
+        hits = []
+    if hits:
+        names = ", ".join(f"{a['name']} ({a['kind']})" for a in hits[:4])
+        a1, a2 = st.columns([5, 1])
+        a1.caption(f"🔔 {len(hits)} bevakning{'ar' if len(hits) > 1 else ''} har nått din kurs: {names}")
+        if a2.button("Visa", key="wl_goto"):
+            st.switch_page(st.session_state["_pages"]["bevakning"])
     mal.render(tx, value + cash, cost, total, len(hold), set(hold["currency"]) if not hold.empty else set())
     if cash < 0:
         st.warning("Saldot för köp är negativt – kontrollera under **Mitt innehav → Pengar för köp**.")

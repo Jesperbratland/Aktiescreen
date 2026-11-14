@@ -43,6 +43,15 @@ CREATE TABLE IF NOT EXISTS accounts (
     custom_min      REAL NOT NULL DEFAULT 0,          -- eget minimicourtage i kr
     cash            REAL NOT NULL DEFAULT 0           -- pengar tillgängliga för köp (SEK)
 );
+CREATE TABLE IF NOT EXISTS watchlist (
+    ticker       TEXT PRIMARY KEY,
+    name         TEXT,
+    added_date   TEXT,
+    added_price  REAL,
+    buy_below    REAL,          -- larm: kursen har fallit till/under
+    sell_above   REAL,          -- larm: kursen har stigit till/över
+    note         TEXT
+);
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -189,6 +198,41 @@ def delete_holding(account: str, ticker: str) -> None:
     """Tar bort alla transaktioner för en aktie på ett konto."""
     with _conn() as conn:
         conn.execute("DELETE FROM transactions WHERE account = ? AND ticker = ?", (account, ticker))
+
+
+# ---------- Bevakningslista ----------
+WATCH_COLUMNS = ["ticker", "name", "added_date", "added_price", "buy_below", "sell_above", "note"]
+
+
+def load_watchlist() -> pd.DataFrame:
+    with _conn() as conn:
+        df = pd.read_sql_query(f"SELECT {', '.join(WATCH_COLUMNS)} FROM watchlist ORDER BY rowid", conn)
+    df["note"] = df["note"].fillna("")
+    return df
+
+
+def add_watch(ticker: str, name: str, price: float | None) -> bool:
+    """Lägger till en aktie. Returnerar False om den redan fanns."""
+    import datetime as _dt
+    with _conn() as conn:
+        if conn.execute("SELECT 1 FROM watchlist WHERE ticker = ?", (ticker,)).fetchone():
+            return False
+        conn.execute("INSERT INTO watchlist (ticker, name, added_date, added_price, note) VALUES (?,?,?,?,'')",
+                     (ticker, name, _dt.date.today().isoformat(), price))
+    return True
+
+
+def save_watchlist(df: pd.DataFrame) -> None:
+    with _conn() as conn:
+        conn.execute("DELETE FROM watchlist")
+        conn.executemany(f"INSERT INTO watchlist ({', '.join(WATCH_COLUMNS)}) VALUES (?,?,?,?,?,?,?)",
+                         [tuple(None if (isinstance(v, float) and v != v) else v for v in row)
+                          for row in df[WATCH_COLUMNS].itertuples(index=False, name=None)])
+
+
+def remove_watch(ticker: str) -> None:
+    with _conn() as conn:
+        conn.execute("DELETE FROM watchlist WHERE ticker = ?", (ticker,))
 
 
 def get_setting(key: str, default: str | None = None) -> str | None:
