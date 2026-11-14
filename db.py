@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS accounts (
     custom_min      REAL NOT NULL DEFAULT 0,          -- eget minimicourtage i kr
     cash            REAL NOT NULL DEFAULT 0           -- pengar tillgängliga för köp (SEK)
 );
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
 CREATE TABLE IF NOT EXISTS cash_log (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     date     TEXT NOT NULL,
@@ -185,6 +189,20 @@ def delete_holding(account: str, ticker: str) -> None:
     """Tar bort alla transaktioner för en aktie på ett konto."""
     with _conn() as conn:
         conn.execute("DELETE FROM transactions WHERE account = ? AND ticker = ?", (account, ticker))
+
+
+def get_setting(key: str, default: str | None = None) -> str | None:
+    with _conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def set_setting(key: str, value: str | None) -> None:
+    with _conn() as conn:
+        if value is None:
+            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+        else:
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
 
 
 def delete_all() -> None:

@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-import db, market, portfolio
+import db, mal, market, portfolio
 from ui import ACCENT, NEG, POS, fmt_pct, fmt_sek
 
 
@@ -72,6 +72,7 @@ def render():
     c[1].metric("Realiserat", fmt_sek(realized))
     c[2].metric("Utdelningar", fmt_sek(divs))
     c[3].metric("Totalt resultat", fmt_sek(total))
+    mal.render(tx, value + cash, cost, total, len(hold), set(hold["currency"]) if not hold.empty else set())
     if cash < 0:
         st.warning("Saldot för köp är negativt – kontrollera under **Mitt innehav → Pengar för köp**.")
 
