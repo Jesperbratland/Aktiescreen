@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-import db, mal, market, portfolio
+import charts, db, mal, market, portfolio
 from ui import ACCENT, NEG, POS, fmt_pct, fmt_sek
 
 
@@ -96,14 +95,16 @@ def _hero(value: float, cash: float, day: float, prev_value: float, total: float
                 up = h.iloc[-1] >= h.iloc[0] if len(h) > 1 else True
                 color = POS if up else NEG
                 fig = go.Figure(go.Scatter(x=h.index, y=h, mode="lines", line=dict(color=color, width=2),
-                                           fill="tozeroy", fillcolor="rgba(34,197,94,0.10)" if up else "rgba(239,68,68,0.10)",
-                                           hovertemplate="%{x|%Y-%m-%d}<br>%{y:,.0f} kr<extra></extra>"))
+                                           fill="tozeroy", fillcolor=charts.hex_to_rgba(color, 0.10),
+                                           hovertemplate="%{x|%d %b %Y}<br><b>%{y:,.0f} kr</b><extra></extra>"))
+                fig.add_trace(go.Scatter(x=[h.index[-1]], y=[h.iloc[-1]], mode="markers", hoverinfo="skip",
+                                         marker=dict(color=color, size=9, line=dict(width=2, color=charts.SURFACE))))
                 lo, hi = float(h.min()), float(h.max())
-                pad = (hi - lo) * 0.1 or hi * 0.05
-                fig.update_layout(height=200, margin=dict(t=25, b=0, l=0, r=0), showlegend=False,
+                pad = (hi - lo) * 0.12 or hi * 0.05
+                fig.update_layout(margin=dict(t=28, b=0, l=0, r=6), showlegend=False, hovermode="x",
                                   xaxis=dict(visible=False), yaxis=dict(visible=False, range=[lo - pad, hi + pad]),
-                                  title=dict(text="Aktier senaste året", font=dict(size=12, color="#A8B5AE"), x=0))
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                                  title=dict(text="Aktier senaste året", font=dict(size=12, color=charts.INK_2)))
+                charts.show(fig, height=200)
     st.write("")
 
 
@@ -192,23 +193,40 @@ def render():
                 cash_group = "SEK" if by == "Valuta" else "💰 Kontanter"
                 alloc = pd.concat([alloc, pd.DataFrame([{"group": cash_group, "value_sek": cash}])])
                 alloc = alloc.groupby("group", as_index=False)["value_sek"].sum()
-            fig = px.pie(alloc, names="group", values="value_sek", hole=0.6)
-            fig.update_traces(textposition="inside", textinfo="percent+label",
-                              hovertemplate="%{label}<br>%{value:,.0f} kr<extra></extra>")
-            fig.update_layout(showlegend=False, height=340, margin=dict(t=10, b=10, l=10, r=10))
-            st.plotly_chart(fig, use_container_width=True)
+            alloc = alloc.sort_values("value_sek", ascending=False)
+            if len(alloc) > 8:  # max 8 färger – resten samlas i "Övrigt"
+                rest = alloc.iloc[7:]["value_sek"].sum()
+                alloc = pd.concat([alloc.iloc[:7], pd.DataFrame([{"group": "Övrigt", "value_sek": rest}])])
+            total_alloc = alloc["value_sek"].sum()
+            fig = go.Figure(go.Pie(
+                labels=alloc["group"], values=alloc["value_sek"], hole=0.72,
+                marker=dict(colors=charts.CATEGORICAL[:len(alloc)], line=dict(color=charts.SURFACE, width=3)),
+                textinfo="none", direction="clockwise", rotation=90,
+                hovertemplate="<b>%{label}</b><br>%{value:,.0f} kr · %{percent}<extra></extra>",
+            ))
+            fig.add_annotation(text=f"<span style='font-size:12px;color:{charts.INK_2}'>Totalt</span><br>"
+                                    f"<b>{fmt_sek(total_alloc)}</b>", showarrow=False, font=dict(size=17),
+                               x=0.5, y=0.5, xref="paper", yref="paper")
+            fig.update_layout(showlegend=True, margin=dict(t=10, b=10, l=10, r=10),
+                              legend=dict(orientation="v", y=0.5, yanchor="middle", x=1.02, xanchor="left"))
+            charts.show(fig, height=320)
 
         with right:
             st.subheader("Resultat per innehav")
             bar = hold.sort_values("unrealized_sek")
+            colors = [charts.POS if v >= 0 else charts.NEG for v in bar["unrealized_sek"]]
             fig = go.Figure(go.Bar(
-                x=bar["unrealized_sek"], y=bar["ticker"], orientation="h",
-                marker_color=[POS if v >= 0 else NEG for v in bar["unrealized_sek"]],
-                customdata=bar["unrealized_pct"] * 100,
-                hovertemplate="%{y}: %{x:,.0f} kr (%{customdata:.1f} %)<extra></extra>",
+                x=bar["unrealized_sek"], y=bar["ticker"], orientation="h", marker_color=colors,
+                width=0.55, customdata=bar["unrealized_pct"] * 100,
+                text=[f"{v * 100:+.0f} %".replace(".", ",") for v in bar["unrealized_pct"]],
+                textposition="outside", textfont=dict(color=charts.INK_2, size=11), cliponaxis=False,
+                hovertemplate="<b>%{y}</b><br>%{x:,.0f} kr · %{customdata:+.1f} %<extra></extra>",
             ))
-            fig.update_layout(height=380, margin=dict(t=10, b=10, l=10, r=10), xaxis_title="Orealiserat (SEK)")
-            st.plotly_chart(fig, use_container_width=True)
+            fig.update_layout(hovermode="closest", margin=dict(t=10, b=10, l=10, r=40),
+                              xaxis=dict(title="Orealiserat (kr)", showgrid=True, zeroline=True,
+                                         zerolinecolor="rgba(244,239,230,0.25)", zerolinewidth=1),
+                              yaxis=dict(showgrid=False))
+            charts.show(fig, height=max(240, 34 * len(bar) + 60))
 
         st.subheader("Innehav")
         table = hold.assign(
@@ -257,27 +275,29 @@ def _history_section(tx: pd.DataFrame, hist: pd.DataFrame):
     tab1, tab2 = st.tabs(["Värde vs insatt kapital", "Avkastning (TWR) vs index"])
     with tab1:
         fig = go.Figure()
+        fig.add_trace(go.Scatter(x=hist.index, y=hist["invested"], name="Insatta pengar",
+                                 line=dict(color=charts.NEUTRAL, width=1.5, shape="hv"),
+                                 hovertemplate="%{y:,.0f} kr"))
         fig.add_trace(go.Scatter(x=hist.index, y=hist["value"], name="Marknadsvärde",
-                                 line=dict(color=ACCENT, width=2), fill="tozeroy",
-                                 fillcolor="rgba(232,180,76,0.12)"))
-        fig.add_trace(go.Scatter(x=hist.index, y=hist["invested"], name="Nettoinsatt",
-                                 line=dict(color="#94A3B8", dash="dash")))
-        fig.update_layout(height=380, hovermode="x unified", margin=dict(t=10, b=10),
-                          yaxis_title="SEK", legend=dict(orientation="h", y=1.05))
-        st.plotly_chart(fig, use_container_width=True)
+                                 line=dict(color=charts.ACCENT, width=2), fill="tozeroy",
+                                 fillcolor=charts.hex_to_rgba(charts.ACCENT, 0.10), hovertemplate="%{y:,.0f} kr"))
+        fig.update_layout(yaxis=dict(ticksuffix=" kr", tickformat=",.0f"))
+        charts.show(fig, height=380)
     with tab2:
         twr = hist["twr_index"] / hist["twr_index"].iloc[0] * 100
         bench = market.get_closes((market.BENCHMARKS[bench_name],), start=hist.index[0].strftime("%Y-%m-%d"))
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=twr.index, y=twr, name="Min portfölj", line=dict(color=ACCENT, width=2)))
         if not bench.empty:
             b = bench.iloc[:, 0].dropna()
             b = b / b.iloc[0] * 100
-            fig.add_trace(go.Scatter(x=b.index, y=b, name=bench_name, line=dict(color="#F59E0B")))
+            fig.add_trace(go.Scatter(x=b.index, y=b, name=bench_name, line=dict(color=charts.CATEGORICAL[0]),
+                                     hovertemplate="%{y:.1f}"))
             delta = twr.iloc[-1] / 100 - b.iloc[-1] / 100
             st.caption(f"Portfölj: {fmt_pct(twr.iloc[-1] / 100 - 1)} · {bench_name}: "
                        f"{fmt_pct(b.iloc[-1] / 100 - 1)} · Skillnad: {fmt_pct(delta)}")
-        fig.update_layout(height=380, hovermode="x unified", margin=dict(t=10, b=10),
-                          yaxis_title="Index (start = 100)", legend=dict(orientation="h", y=1.05))
-        st.plotly_chart(fig, use_container_width=True)
+        fig.add_trace(go.Scatter(x=twr.index, y=twr, name="Min portfölj", line=dict(color=charts.ACCENT),
+                                 hovertemplate="%{y:.1f}"))
+        fig.add_hline(y=100, line_color="rgba(244,239,230,0.2)", line_width=1)
+        fig.update_layout(yaxis_title="Index (start = 100)")
+        charts.show(fig, height=380)
         st.caption("TWR = tidsviktad avkastning, opåverkad av när du sätter in/tar ut pengar. Utdelningar räknas in.")

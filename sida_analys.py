@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-import analysis, db, market, portfolio
+import analysis, charts, db, market, portfolio
 from ui import DISCLAIMER, NEG, POS, fmt_big, fmt_num, fmt_pct, fmt_sek, signal_card
 
 
@@ -70,19 +70,37 @@ def render():
     sub = [i for i in ("Volym", "RSI", "MACD") if i in indicators]
     rows = 1 + len(sub)
     heights = [0.55] + [0.45 / len(sub)] * len(sub) if sub else [1.0]
-    fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=heights)
-    fig.add_trace(go.Candlestick(x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
-                                 name=ticker, increasing_line_color=POS, decreasing_line_color=NEG), row=1, col=1)
-    colors = {"MA20": "#A78BFA", "MA50": "#F59E0B", "MA200": "#3B82F6"}
+    style = st.segmented_control("Diagramtyp", ["📈 Linje", "🕯️ Candlestick"], default="📈 Linje",
+                                 label_visibility="collapsed", key="chart_style") or "📈 Linje"
+    fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=heights)
+    if "Bollinger" in indicators:
+        up, mid, lo = analysis.bollinger(close)
+        fig.add_trace(go.Scatter(x=df.index, y=up.loc[df.index], name="Bollinger", legendgroup="bb",
+                                 line=dict(color="rgba(168,181,174,0.35)", width=1), hoverinfo="skip"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=lo.loc[df.index], name="Bollinger", legendgroup="bb", showlegend=False,
+                                 line=dict(color="rgba(168,181,174,0.35)", width=1), hoverinfo="skip",
+                                 fill="tonexty", fillcolor="rgba(168,181,174,0.06)"), row=1, col=1)
+    period_up = df["Close"].iloc[-1] >= df["Close"].iloc[0]
+    main_col = charts.POS if period_up else charts.NEG
+    if style.startswith("🕯️"):
+        fig.add_trace(go.Candlestick(x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
+                                     name=ticker, increasing=dict(line=dict(color=charts.POS, width=1), fillcolor=charts.POS),
+                                     decreasing=dict(line=dict(color=charts.NEG, width=1), fillcolor=charts.NEG)),
+                      row=1, col=1)
+    else:
+        lo_y = float(df["Low"].min())
+        # Ton under linjen ner till diagrammets botten (inte till noll, så att kursrörelsen syns)
+        fig.add_trace(go.Scatter(x=df.index, y=[lo_y * 0.97] * len(df), showlegend=False, hoverinfo="skip",
+                                 line=dict(width=0)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df["Close"], name=ticker, line=dict(color=main_col, width=2),
+                                 fill="tonexty", fillcolor=charts.hex_to_rgba(main_col, 0.10),
+                                 hovertemplate="%{y:,.2f}"), row=1, col=1)
+        fig.update_yaxes(range=[lo_y * 0.97, float(df["High"].max()) * 1.02], row=1, col=1)
+    colors = {"MA20": charts.CATEGORICAL[6], "MA50": charts.CATEGORICAL[1], "MA200": charts.CATEGORICAL[0]}
     for ma, n in (("MA20", 20), ("MA50", 50), ("MA200", 200)):
         if ma in indicators:
             fig.add_trace(go.Scatter(x=df.index, y=analysis.sma(close, n).loc[df.index], name=ma,
-                                     line=dict(color=colors[ma], width=1.4)), row=1, col=1)
-    if "Bollinger" in indicators:
-        up, mid, lo = analysis.bollinger(close)
-        fig.add_trace(go.Scatter(x=df.index, y=up.loc[df.index], name="BB övre", line=dict(color="#64748B", width=1)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=lo.loc[df.index], name="BB nedre", line=dict(color="#64748B", width=1),
-                                 fill="tonexty", fillcolor="rgba(100,116,139,0.08)"), row=1, col=1)
+                                     line=dict(color=colors[ma], width=1.5), hovertemplate="%{y:,.2f}"), row=1, col=1)
 
     # Eget GAV som linje
     if ticker in held:
@@ -90,43 +108,49 @@ def render():
         p = pos[(pos["ticker"] == ticker) & (pos["qty"] > 0)]
         if not p.empty:
             gav = float(p["cost_local"].iloc[0] / p["qty"].iloc[0])
-            fig.add_hline(y=gav, line_dash="dot", line_color="#E5E7EB", row=1, col=1,
-                          annotation_text=f"Ditt GAV {fmt_num(gav, 2)}", annotation_position="top left")
+            fig.add_hline(y=gav, line_dash="dot", line_color=charts.ACCENT, line_width=1.5, row=1, col=1,
+                          annotation_text=f"Ditt GAV {fmt_num(gav, 2)}", annotation_position="top left",
+                          annotation_font=dict(color=charts.INK_2, size=11))
         buys = tx[(tx["ticker"] == ticker) & (tx["type"].isin(["KÖP", "SÄLJ"]))].copy()
         buys["date"] = pd.to_datetime(buys["date"])
         buys = buys[buys["date"] >= df.index[0]]
-        for typ, sym, col in (("KÖP", "triangle-up", POS), ("SÄLJ", "triangle-down", NEG)):
+        for typ, sym, col in (("KÖP", "triangle-up", charts.POS), ("SÄLJ", "triangle-down", charts.NEG)):
             b = buys[buys["type"] == typ]
             if not b.empty:
                 fig.add_trace(go.Scatter(x=b["date"], y=b["price"], mode="markers", name=typ,
-                                         marker=dict(symbol=sym, size=12, color=col, line=dict(width=1, color="white"))),
+                                         marker=dict(symbol=sym, size=12, color=col, line=dict(width=2, color=charts.SURFACE)),
+                                         hovertemplate=f"{typ} %{{y:,.2f}}"),
                               row=1, col=1)
 
     r = 2
     if "Volym" in sub:
-        vcol = [POS if c >= o else NEG for o, c in zip(df["Open"], df["Close"])]
-        fig.add_trace(go.Bar(x=df.index, y=df["Volume"], marker_color=vcol, name="Volym", opacity=0.6), row=r, col=1)
-        fig.update_yaxes(title_text="Volym", row=r, col=1)
+        vcol = [charts.hex_to_rgba(charts.POS if c >= o else charts.NEG, 0.45) for o, c in zip(df["Open"], df["Close"])]
+        fig.add_trace(go.Bar(x=df.index, y=df["Volume"], marker_color=vcol, name="Volym", showlegend=False,
+                             hovertemplate="%{y:,.0f}"), row=r, col=1)
+        fig.update_yaxes(title_text="Volym", row=r, col=1, showgrid=False)
         r += 1
     if "RSI" in sub:
-        fig.add_trace(go.Scatter(x=df.index, y=analysis.rsi(close).loc[df.index], name="RSI",
-                                 line=dict(color="#A78BFA")), row=r, col=1)
+        fig.add_hrect(y0=30, y1=70, fillcolor="rgba(244,239,230,0.04)", line_width=0, row=r, col=1)
         for lvl in (30, 70):
-            fig.add_hline(y=lvl, line_dash="dash", line_color="#64748B", row=r, col=1)
-        fig.update_yaxes(title_text="RSI", range=[0, 100], row=r, col=1)
+            fig.add_hline(y=lvl, line_color="rgba(244,239,230,0.15)", line_width=1, row=r, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=analysis.rsi(close).loc[df.index], name="RSI", showlegend=False,
+                                 line=dict(color=charts.CATEGORICAL[6], width=1.5), hovertemplate="%{y:.0f}"), row=r, col=1)
+        fig.update_yaxes(title_text="RSI", range=[0, 100], tickvals=[30, 70], row=r, col=1)
         r += 1
     if "MACD" in sub:
         line, sig, hist = analysis.macd(close)
-        fig.add_trace(go.Bar(x=df.index, y=hist.loc[df.index], name="MACD hist",
-                             marker_color=[POS if v >= 0 else NEG for v in hist.loc[df.index]]), row=r, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=line.loc[df.index], name="MACD", line=dict(color="#3B82F6")), row=r, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=sig.loc[df.index], name="Signal", line=dict(color="#F59E0B")), row=r, col=1)
+        fig.add_trace(go.Bar(x=df.index, y=hist.loc[df.index], name="MACD hist", showlegend=False,
+                             marker_color=[charts.hex_to_rgba(charts.POS if v >= 0 else charts.NEG, 0.5)
+                                           for v in hist.loc[df.index]], hovertemplate="%{y:.2f}"), row=r, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=line.loc[df.index], name="MACD", showlegend=False,
+                                 line=dict(color=charts.CATEGORICAL[0], width=1.5), hovertemplate="%{y:.2f}"), row=r, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=sig.loc[df.index], name="Signal", showlegend=False,
+                                 line=dict(color=charts.CATEGORICAL[1], width=1.5), hovertemplate="%{y:.2f}"), row=r, col=1)
         fig.update_yaxes(title_text="MACD", row=r, col=1)
 
-    fig.update_layout(height=520 + 140 * len(sub), xaxis_rangeslider_visible=False, hovermode="x unified",
-                      margin=dict(t=10, b=10), legend=dict(orientation="h", y=1.02))
-    fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_layout(xaxis_rangeslider_visible=False, bargap=0.15, barcornerradius=1)
+    fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])], showgrid=False)
+    charts.show(fig, height=520 + 140 * len(sub))
 
     # ---------- Signaler + nyckeltal ----------
     left, mid, right = st.columns([1.1, 1, 1])
@@ -182,12 +206,16 @@ def render():
     if not comp.empty:
         norm = comp.ffill().apply(lambda s: s / s.dropna().iloc[0] * 100 if s.notna().any() else s)
         fig2 = go.Figure()
-        for col in norm.columns:
-            fig2.add_trace(go.Scatter(x=norm.index, y=norm[col], name=col,
-                                      line=dict(width=2.5 if col == ticker else 1.4)))
-        fig2.update_layout(height=360, hovermode="x unified", margin=dict(t=10, b=10),
-                           yaxis_title="Index (start = 100)", legend=dict(orientation="h", y=1.05))
-        st.plotly_chart(fig2, use_container_width=True)
+        others_cols = [c for c in norm.columns if c != ticker]
+        for i, col in enumerate(others_cols):
+            fig2.add_trace(go.Scatter(x=norm.index, y=norm[col], name=col, hovertemplate="%{y:.1f}",
+                                      line=dict(color=charts.CATEGORICAL[i % len(charts.CATEGORICAL)], width=1.5)))
+        if ticker in norm.columns:
+            fig2.add_trace(go.Scatter(x=norm.index, y=norm[ticker], name=ticker, hovertemplate="%{y:.1f}",
+                                      line=dict(color=charts.ACCENT, width=2.5)))
+        fig2.add_hline(y=100, line_color="rgba(244,239,230,0.2)", line_width=1)
+        fig2.update_layout(yaxis_title="Index (start = 100)")
+        charts.show(fig2, height=360)
 
     st.caption(DISCLAIMER)
 

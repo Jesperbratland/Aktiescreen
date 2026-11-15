@@ -8,6 +8,7 @@ st.set_page_config(page_title="Aktiescreen", page_icon="🎄", layout="wide",
                    initial_sidebar_state="expanded")
 
 import auth  # noqa: E402
+import charts  # noqa: E402,F401  (registrerar diagramstilen)
 import market  # noqa: E402
 from ui import JULTEMA, christmas_greeting, inject_christmas, inject_css  # noqa: E402
 import sida_analys as stock_analysis  # noqa: E402

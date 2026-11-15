@@ -81,7 +81,18 @@ def _health(tx):
         signal_card(*t)
 
     st.subheader("Sektorfördelning")
-    st.bar_chart(sector_w * 100, horizontal=True, y_label="Andel (%)", x_label="")
+    import plotly.graph_objects as go
+
+    import charts
+    sw = (sector_w * 100).sort_values()
+    fig = go.Figure(go.Bar(x=sw.values, y=sw.index, orientation="h", width=0.55,
+                           marker_color=charts.CATEGORICAL[0],
+                           text=[f"{v:.0f} %" for v in sw.values], textposition="outside",
+                           textfont=dict(color=charts.INK_2, size=11), cliponaxis=False,
+                           hovertemplate="<b>%{y}</b><br>%{x:.1f} %<extra></extra>"))
+    fig.update_layout(hovermode="closest", margin=dict(t=10, b=10, l=10, r=40),
+                      xaxis=dict(ticksuffix=" %", showgrid=True), yaxis=dict(showgrid=False))
+    charts.show(fig, height=max(200, 34 * len(sw) + 50))
 
 
 def _holding_signals(tx):

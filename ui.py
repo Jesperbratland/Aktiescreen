@@ -5,8 +5,8 @@ import math
 
 import streamlit as st
 
-POS = "#22C55E"
-NEG = "#EF4444"
+POS = "#4ADE80"
+NEG = "#F87171"
 NEU = "#94A3B8"
 ACCENT = "#E8B44C"  # guld (jultema). Original: "#3B82F6"
 

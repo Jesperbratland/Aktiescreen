@@ -15,6 +15,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import charts
 import db
 import market
 import portfolio
@@ -159,19 +160,25 @@ def render():
     chance = float((sims[:, -1] >= target).mean())
 
     fig = go.Figure()
+    # Spannet mellan dåligt och bra utfall som en mjuk ton
     fig.add_trace(go.Scatter(x=dates, y=p90, name="Bra utfall (1 av 10 blir bättre)",
-                             line=dict(color=POS, dash="dash", width=1.5)))
+                             line=dict(color=charts.POS, width=1.5), hovertemplate="%{y:,.0f} kr"))
     fig.add_trace(go.Scatter(x=dates, y=p10, name="Dåligt utfall (1 av 10 blir sämre)",
-                             line=dict(color=NEG, dash="dash", width=1.5),
-                             fill="tonexty", fillcolor="rgba(232,180,76,0.08)"))
-    fig.add_trace(go.Scatter(x=dates, y=p50, name="Troligt", line=dict(color=ACCENT, width=3)))
-    fig.add_trace(go.Scatter(x=dates, y=deposits, name="Bara insatta pengar", line=dict(color="#94A3B8", width=2)))
+                             line=dict(color=charts.NEG, width=1.5), hovertemplate="%{y:,.0f} kr",
+                             fill="tonexty", fillcolor=charts.hex_to_rgba(charts.ACCENT, 0.07)))
+    fig.add_trace(go.Scatter(x=dates, y=deposits, name="Bara insatta pengar", hovertemplate="%{y:,.0f} kr",
+                             line=dict(color=charts.NEUTRAL, width=1.5, dash="dot")))
+    fig.add_trace(go.Scatter(x=dates, y=p50, name="Troligt", hovertemplate="<b>%{y:,.0f} kr</b>",
+                             line=dict(color=charts.ACCENT, width=3)))
+    fig.add_trace(go.Scatter(x=[dates[-1]], y=[p50[-1]], mode="markers+text", showlegend=False, hoverinfo="skip",
+                             text=[fmt_sek(p50[-1])], textposition="middle left", textfont=dict(color=charts.INK, size=12),
+                             marker=dict(color=charts.ACCENT, size=10, line=dict(width=2, color=charts.SURFACE))))
     if target > 0:
-        fig.add_hline(y=target, line_dash="dot", line_color="#F4EFE6",
-                      annotation_text=f"Mål {fmt_sek(target)}", annotation_position="top left")
-    fig.update_layout(height=460, hovermode="x unified", margin=dict(t=20, b=10), yaxis_title="SEK",
-                      legend=dict(orientation="h", y=-0.15), yaxis_tickformat=",.0f", separators=", ")
-    st.plotly_chart(fig, use_container_width=True)
+        fig.add_hline(y=target, line_color="rgba(244,239,230,0.45)", line_width=1,
+                      annotation_text=f"🎯 Mål {fmt_sek(target)}", annotation_position="top left",
+                      annotation_font=dict(color=charts.INK_2, size=12))
+    fig.update_layout(yaxis=dict(tickformat=",.0f", ticksuffix=" kr"), legend=dict(traceorder="normal"))
+    charts.show(fig, height=460)
 
     end = st.columns(4)
     end[0].metric("Troligt slutvärde", fmt_sek(p50[-1]))

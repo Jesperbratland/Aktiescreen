@@ -4,7 +4,7 @@ from __future__ import annotations
 import plotly.express as px
 import streamlit as st
 
-import db, screener
+import charts, db, screener
 from ui import DISCLAIMER
 
 
@@ -117,11 +117,14 @@ def render():
         plot = plot[(plot["P/E"] > 0) & (plot["P/E"] < 100)]
         if not plot.empty:
             fig = px.scatter(plot, x="P/E", y=plot["12 m"] * 100, color="Poäng", hover_name="ticker",
-                             hover_data={"Namn": True}, color_continuous_scale="Blues",
-                             labels={"y": "12 m avkastning (%)"})
-            fig.update_traces(marker=dict(size=12, line=dict(width=1, color="white")))
-            fig.update_layout(height=420, margin=dict(t=30, b=10), title="Värdering vs momentum")
-            b.plotly_chart(fig, use_container_width=True)
+                             hover_data={"Namn": True}, color_continuous_scale=charts.SEQUENTIAL_BLUE[::-1],
+                             labels={"y": "12 mån avkastning (%)"})
+            fig.update_traces(marker=dict(size=13, line=dict(width=2, color=charts.SURFACE)))
+            fig.add_hline(y=0, line_color="rgba(244,239,230,0.2)", line_width=1)
+            fig.update_layout(hovermode="closest", title="Värdering vs momentum",
+                              coloraxis_colorbar=dict(thickness=10, outlinewidth=0, title=dict(text="Poäng")),
+                              yaxis=dict(ticksuffix=" %"))
+            charts.show(fig, where=b, height=420)
 
     st.download_button("⬇️ Exportera resultat (CSV)", out.to_csv().encode("utf-8"), "screener.csv", "text/csv")
     st.caption(DISCLAIMER)
