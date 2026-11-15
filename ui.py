@@ -145,7 +145,8 @@ h2, h3 {letter-spacing: -0.015em !important;}
 
 
 def inject_css() -> None:
-    st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)
+    from begrepp import CSS as TERMS_CSS
+    st.markdown(f"<style>{CSS}{TERMS_CSS}</style>", unsafe_allow_html=True)
 
 
 # ---------- 🎄 Jultema ----------

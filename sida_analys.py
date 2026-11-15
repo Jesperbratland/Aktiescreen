@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-import analysis, charts, db, market, portfolio
+import analysis, begrepp, charts, db, market, portfolio
 from ui import DISCLAIMER, NEG, POS, fmt_big, fmt_num, fmt_pct, fmt_sek, signal_card
 
 
@@ -23,6 +23,8 @@ def render():
                             format_func=lambda p: {"6mo": "6 mån", "1y": "1 år", "2y": "2 år", "5y": "5 år",
                                                    "10y": "10 år", "max": "Max"}[p])
     indicators = c[2].multiselect("Indikatorer", ["MA20", "MA50", "MA200", "Bollinger", "RSI", "MACD", "Volym"],
+                                  help="\n\n".join(f"**{t}:** {begrepp.TERMS[t]}" for t in
+                                                   ["MA20", "MA50", "MA200", "Bollinger", "RSI", "MACD", "Volym"]),
                                   default=["MA50", "MA200", "RSI", "Volym"])
     if held:
         st.caption("Dina innehav: " + " · ".join(held))
@@ -56,14 +58,14 @@ def render():
     st.markdown(f"### {name}  <span class='small-muted'>{ticker} · {info.get('exchange', '')} · "
                 f"{info.get('sector', '')}</span>", unsafe_allow_html=True)
     k = st.columns(6)
-    k[0].metric("Senaste kurs", f"{fmt_num(last, 2)} {cur}", fmt_pct(last / prev - 1, 2))
-    k[1].metric("Börsvärde", fmt_big(info.get("marketCap")))
-    k[2].metric("P/E", fmt_num(info.get("trailingPE"), 1))
-    k[3].metric("P/B", fmt_num(info.get("priceToBook"), 1))
+    k[0].metric("Senaste kurs", f"{fmt_num(last, 2)} {cur}", fmt_pct(last / prev - 1, 2), help=begrepp.TERMS["Senaste kurs"])
+    k[1].metric("Börsvärde", fmt_big(info.get("marketCap")), help=begrepp.TERMS["Börsvärde"])
+    k[2].metric("P/E", fmt_num(info.get("trailingPE"), 1), help=begrepp.TERMS["P/E"])
+    k[3].metric("P/B", fmt_num(info.get("priceToBook"), 1), help=begrepp.TERMS["P/B"])
     dr, cp = info.get("dividendRate"), info.get("currentPrice") or last
-    k[4].metric("Direktavkastning", fmt_pct(dr / cp, 2, sign=False) if dr and cp else "–")
+    k[4].metric("Direktavkastning", fmt_pct(dr / cp, 2, sign=False) if dr and cp else "–", help=begrepp.TERMS["Direktavkastning"])
     y = close.tail(252)
-    k[5].metric("52v intervall", f"{fmt_num(y.min(), 0)}–{fmt_num(y.max(), 0)}")
+    k[5].metric("52v intervall", f"{fmt_num(y.min(), 0)}–{fmt_num(y.max(), 0)}", help=begrepp.TERMS["52v intervall"])
     _buy_calc(ticker, float(last), cur)
 
     # ---------- Graf ----------
@@ -164,15 +166,14 @@ def render():
     with mid:
         st.subheader("Avkastning")
         pr = analysis.period_returns(close)
-        st.dataframe(pd.DataFrame({"Period": pr.keys(), "Avkastning": [fmt_pct(v) for v in pr.values()]}),
-                     hide_index=True, use_container_width=True)
+        begrepp.table([(k_, fmt_pct(v)) for k_, v in pr.items()], "Period", "Avkastning")
         st.subheader("Risk (vald period)")
         stats = analysis.perf_stats(df["Close"])
         bench = market.get_closes(("^OMX" if ticker.endswith(".ST") else "^GSPC",), period=fetch)
         b = analysis.beta(df["Close"], bench.iloc[:, 0].loc[bench.index >= df.index[0]]) if not bench.empty else None
         rows_ = [(k_, fmt_pct(v) if k_ not in ("Sharpe", "Sortino") else fmt_num(v, 2)) for k_, v in stats.items()]
         rows_.append(("Beta mot " + ("OMXS30" if ticker.endswith(".ST") else "S&P 500"), fmt_num(b, 2)))
-        st.dataframe(pd.DataFrame(rows_, columns=["Mått", "Värde"]), hide_index=True, use_container_width=True)
+        begrepp.table(rows_, "Mått", "Värde")
     with right:
         st.subheader("Nyckeltal")
         fund = [
@@ -191,7 +192,7 @@ def render():
             ("Analytikers riktkurs", f"{fmt_num(info.get('targetMeanPrice'), 1)} {cur}" if info.get("targetMeanPrice") else "–"),
             ("Analytikerkonsensus", (info.get("recommendationKey") or "–").replace("_", " ")),
         ]
-        st.dataframe(pd.DataFrame(fund, columns=["Nyckeltal", "Värde"]), hide_index=True, use_container_width=True)
+        begrepp.table(fund, "Nyckeltal", "Värde")
 
     if summary := info.get("longBusinessSummary"):
         with st.expander("Om bolaget"):
