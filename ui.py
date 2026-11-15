@@ -66,6 +66,18 @@ CSS = """
 .signal.neu {border-color: #94A3B8;}
 .signal b {display: block; margin-bottom: 2px;}
 .small-muted {color: #A8B5AE; font-size: 0.85rem;}
+/* Sammanfattning överst på Översikten */
+.hero-top {color: #A8B5AE; font-size: .9rem; margin-bottom: .6rem;}
+.hero-label {color: #A8B5AE; font-size: .85rem; text-transform: uppercase; letter-spacing: .08em;}
+.hero-value {font-size: 2.6rem; font-weight: 700; line-height: 1.15; margin: .1rem 0 .2rem;}
+.hero-sub {color: #A8B5AE; font-size: .9rem; margin-bottom: 1rem;}
+.hero-pills {display: flex; gap: .7rem; flex-wrap: wrap;}
+.pill {background: #1B332B; border: 1px solid #2A3F36; border-radius: 12px; padding: .55rem .9rem; min-width: 150px;}
+.pill span {display: block; color: #A8B5AE; font-size: .78rem;}
+.pill b {display: block; font-size: 1.15rem;}
+.pill small {font-size: .85rem;}
+.pill.pos b, .pill.pos small {color: #22C55E;}
+.pill.neg b, .pill.neg small {color: #EF4444;}
 """
 
 

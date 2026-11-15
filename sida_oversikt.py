@@ -21,10 +21,86 @@ def _load_portfolio(tx):
     return tx, pos, hold
 
 
+DAYS = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"]
+MONTHS = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober",
+          "november", "december"]
+
+
+def _compute_history(tx: pd.DataFrame) -> pd.DataFrame:
+    if tx.empty:
+        return pd.DataFrame()
+    start = pd.to_datetime(tx["date"]).min().strftime("%Y-%m-%d")
+    closes = market.get_closes(tuple(sorted(tx["ticker"].unique())), start=start)
+    fx_hist = market.get_fx_history(tuple(sorted(tx["currency"].unique())), start)
+    return portfolio.portfolio_history(tx, closes, fx_hist)
+
+
+def _greeting() -> str:
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    now = dt.datetime.now(ZoneInfo("Europe/Stockholm"))
+    h = now.hour
+    hello = ("God natt" if h < 5 else "God morgon" if h < 10 else "Hej" if h < 17
+             else "God kväll" if h < 23 else "God natt")
+    return f"{hello} 👋 · {DAYS[now.weekday()]} {now.day} {MONTHS[now.month - 1]}"
+
+
+def _pill(label: str, kr: float, pct: float | None) -> str:
+    tone = "pos" if kr > 0.5 else "neg" if kr < -0.5 else ""
+    kr_txt = ("+" if kr > 0.5 else "") + fmt_sek(kr)
+    pct_txt = fmt_pct(pct, 1) if pct is not None and pct == pct else "&nbsp;"
+    return f'<div class="pill {tone}"><span>{label}</span><b>{kr_txt}</b><small>{pct_txt}</small></div>'
+
+
+def _hero(value: float, cash: float, day: float, prev_value: float, total: float, hist: pd.DataFrame):
+    today = pd.Timestamp.today().normalize()
+    ytd_kr = ytd_pct = start_pct = None
+    if not hist.empty:
+        soy = pd.Timestamp(year=today.year, month=1, day=1)
+        before = hist[hist.index < soy]
+        base_val = float(before["value"].iloc[-1]) if not before.empty else 0.0
+        base_twr = float(before["twr_index"].iloc[-1]) if not before.empty else 100.0
+        in_year = hist[hist.index >= soy]
+        ytd_kr = value - base_val - float(in_year["cashflow"].sum()) + \
+            float(in_year["dividends"].iloc[-1] - (before["dividends"].iloc[-1] if not before.empty else 0.0)) \
+            if not in_year.empty else 0.0
+        ytd_pct = float(hist["twr_index"].iloc[-1]) / base_twr - 1
+        start_pct = float(hist["twr_index"].iloc[-1]) / 100 - 1
+
+    with st.container(border=True):
+        left, right = st.columns([1.45, 1])
+        with left:
+            st.markdown(
+                f'<div class="hero-top">{_greeting()}</div>'
+                f'<div class="hero-label">Totalt värde</div>'
+                f'<div class="hero-value">{fmt_sek(value + cash)}</div>'
+                f'<div class="hero-sub">Aktier {fmt_sek(value)} · 💰 Tillgängligt för köp {fmt_sek(cash)}</div>'
+                f'<div class="hero-pills">'
+                f'{_pill("Idag", day, day / prev_value if prev_value else None)}'
+                f'{_pill(f"I år ({today.year})", ytd_kr if ytd_kr is not None else 0.0, ytd_pct)}'
+                f'{_pill("Sedan start", total, start_pct)}'
+                f'</div>', unsafe_allow_html=True)
+        with right:
+            if not hist.empty:
+                h = hist[hist.index >= today - pd.DateOffset(years=1)]["value"]
+                up = h.iloc[-1] >= h.iloc[0] if len(h) > 1 else True
+                color = POS if up else NEG
+                fig = go.Figure(go.Scatter(x=h.index, y=h, mode="lines", line=dict(color=color, width=2),
+                                           fill="tozeroy", fillcolor="rgba(34,197,94,0.10)" if up else "rgba(239,68,68,0.10)",
+                                           hovertemplate="%{x|%Y-%m-%d}<br>%{y:,.0f} kr<extra></extra>"))
+                lo, hi = float(h.min()), float(h.max())
+                pad = (hi - lo) * 0.1 or hi * 0.05
+                fig.update_layout(height=200, margin=dict(t=25, b=0, l=0, r=0), showlegend=False,
+                                  xaxis=dict(visible=False), yaxis=dict(visible=False, range=[lo - pad, hi + pad]),
+                                  title=dict(text="Aktier senaste året", font=dict(size=12, color="#A8B5AE"), x=0))
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.write("")
+
+
 def render():
-    st.title("📊 Portföljöversikt")
     tx = db.load_transactions()
     if tx.empty:
+        st.title("📊 Portföljöversikt")
         st.info("Du har inga aktier inlagda ännu.")
         a, b, _ = st.columns([1, 1, 2])
         if a.button("➕ Lägg in mina aktier", type="primary", use_container_width=True):
@@ -60,13 +136,9 @@ def render():
     total = unreal + realized + divs
     prev_value = value - day
 
-    c = st.columns(4)
-    c[0].metric("Totalt värde", fmt_sek(value + cash), help="Aktier + pengar tillgängliga för köp")
-    c[1].metric("Aktier", fmt_sek(value))
-    c[2].metric("💰 Tillgängligt för köp", fmt_sek(cash),
-                fmt_pct(cash / (value + cash), 0, sign=False) + " av totalen" if value + cash > 0 else None,
-                delta_color="off", help="Ändra under Mitt innehav → Pengar för köp")
-    c[3].metric("Idag", fmt_sek(day), fmt_pct(day / prev_value if prev_value else None, 2))
+    with st.spinner("Räknar på historiken…"):
+        hist = _compute_history(tx)
+    _hero(value, cash, day, prev_value, total, hist)
     try:
         import sida_bevakning
         hits = sida_bevakning.alerts()
@@ -153,21 +225,14 @@ def render():
             },
         )
 
-    _history_section(tx)
+    _history_section(tx, hist)
 
 
-def _history_section(tx: pd.DataFrame):
+def _history_section(tx: pd.DataFrame, hist: pd.DataFrame):
     st.subheader("Utveckling över tid")
     c1, c2 = st.columns([1, 1])
     bench_name = c1.selectbox("Jämförelseindex", list(market.BENCHMARKS), index=0)
     period = c2.segmented_control("Period", ["3 m", "6 m", "1 år", "3 år", "Allt"], default="Allt")
-
-    start = pd.to_datetime(tx["date"]).min().strftime("%Y-%m-%d")
-    tickers = tuple(sorted(tx["ticker"].unique()))
-    with st.spinner("Beräknar historik…"):
-        closes = market.get_closes(tickers, start=start)
-        fx_hist = market.get_fx_history(tuple(sorted(tx["currency"].unique())), start)
-        hist = portfolio.portfolio_history(tx, closes, fx_hist)
     if hist.empty:
         st.info("Inte tillräckligt med historik ännu.")
         return
