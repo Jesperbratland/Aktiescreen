@@ -37,6 +37,11 @@ TERMS: dict[str, str] = {
                     "Högt = mer sårbart om räntorna stiger eller vinsten faller.",
     "Utdelningsandel": "Andel av vinsten som delas ut. Över 100 % betyder att bolaget delar ut mer än det tjänar, "
                        "vilket sällan håller i längden.",
+    "Fritt kassaflöde": "Pengarna som blir över när bolaget har betalat allt och gjort sina investeringar. Det är "
+                        "de pengarna som kan bli utdelning, återköp eller ny tillväxt.",
+    "Rimligt värde": "En uppskattning av vad aktien borde vara värd, räknat på flera sätt (vinst, eget kapital, "
+                     "utdelning, analytiker). Plus = aktien kostar mindre än det uppskattade värdet.",
+    "Från 52v-högsta": "Hur långt under årets högsta kurs aktien ligger. Nära 0 = stark aktie.",
     "Analytikers riktkurs": "Genomsnittet av analytikernas bedömning av vad aktien är värd om ca ett år. "
                             "Ofta fel – se det som en fingervisning.",
     "Analytikerkonsensus": "Vad analytikerna i snitt rekommenderar: strong buy, buy, hold (behåll), sell.",

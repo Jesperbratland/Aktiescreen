@@ -66,183 +66,188 @@ def render():
     k[4].metric("Direktavkastning", fmt_pct(dr / cp, 2, sign=False) if dr and cp else "–", help=begrepp.TERMS["Direktavkastning"])
     y = close.tail(252)
     k[5].metric("52v intervall", f"{fmt_num(y.min(), 0)}–{fmt_num(y.max(), 0)}", help=begrepp.TERMS["52v intervall"])
-    _buy_calc(ticker, float(last), cur)
 
-    # ---------- Graf ----------
-    sub = [i for i in ("Volym", "RSI", "MACD") if i in indicators]
-    rows = 1 + len(sub)
-    heights = [0.55] + [0.45 / len(sub)] * len(sub) if sub else [1.0]
-    style = st.segmented_control("Diagramtyp", ["📈 Linje", "🕯️ Candlestick"], default="📈 Linje",
-                                 label_visibility="collapsed", key="chart_style") or "📈 Linje"
-    fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=heights)
-    if "Bollinger" in indicators:
-        up, mid, lo = analysis.bollinger(close)
-        fig.add_trace(go.Scatter(x=df.index, y=up.loc[df.index], name="Bollinger", legendgroup="bb",
-                                 line=dict(color="rgba(168,181,174,0.35)", width=1), hoverinfo="skip"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=lo.loc[df.index], name="Bollinger", legendgroup="bb", showlegend=False,
-                                 line=dict(color="rgba(168,181,174,0.35)", width=1), hoverinfo="skip",
-                                 fill="tonexty", fillcolor="rgba(168,181,174,0.06)"), row=1, col=1)
-    period_up = df["Close"].iloc[-1] >= df["Close"].iloc[0]
-    main_col = charts.POS if period_up else charts.NEG
-    if style.startswith("🕯️"):
-        fig.add_trace(go.Candlestick(x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
-                                     name=ticker, increasing=dict(line=dict(color=charts.POS, width=1), fillcolor=charts.POS),
-                                     decreasing=dict(line=dict(color=charts.NEG, width=1), fillcolor=charts.NEG)),
-                      row=1, col=1)
-    else:
-        lo_y = float(df["Low"].min())
-        # Ton under linjen ner till diagrammets botten (inte till noll, så att kursrörelsen syns)
-        fig.add_trace(go.Scatter(x=df.index, y=[lo_y * 0.97] * len(df), showlegend=False, hoverinfo="skip",
-                                 line=dict(width=0)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=df["Close"], name=ticker, line=dict(color=main_col, width=2),
-                                 fill="tonexty", fillcolor=charts.hex_to_rgba(main_col, 0.10),
-                                 hovertemplate="%{y:,.2f}"), row=1, col=1)
-        fig.update_yaxes(range=[lo_y * 0.97, float(df["High"].max()) * 1.02], row=1, col=1)
-    colors = {"MA20": charts.CATEGORICAL[6], "MA50": charts.CATEGORICAL[1], "MA200": charts.CATEGORICAL[0]}
-    for ma, n in (("MA20", 20), ("MA50", 50), ("MA200", 200)):
-        if ma in indicators:
-            fig.add_trace(go.Scatter(x=df.index, y=analysis.sma(close, n).loc[df.index], name=ma,
-                                     line=dict(color=colors[ma], width=1.5), hovertemplate="%{y:,.2f}"), row=1, col=1)
+    tab_guide, tab_chart, tab_more = st.tabs(["🧭 Analysguide", "📈 Diagram & nyckeltal", "📰 Nyheter & jämförelse"])
+    with tab_guide:
+        import sida_analysguide
+        sida_analysguide.render_guide(ticker, full, info, cur)
+    with tab_chart:
+        # ---------- Graf ----------
+        sub = [i for i in ("Volym", "RSI", "MACD") if i in indicators]
+        rows = 1 + len(sub)
+        heights = [0.55] + [0.45 / len(sub)] * len(sub) if sub else [1.0]
+        style = st.segmented_control("Diagramtyp", ["📈 Linje", "🕯️ Candlestick"], default="📈 Linje",
+                                     label_visibility="collapsed", key="chart_style") or "📈 Linje"
+        fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=heights)
+        if "Bollinger" in indicators:
+            up, mid, lo = analysis.bollinger(close)
+            fig.add_trace(go.Scatter(x=df.index, y=up.loc[df.index], name="Bollinger", legendgroup="bb",
+                                     line=dict(color="rgba(168,181,174,0.35)", width=1), hoverinfo="skip"), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=lo.loc[df.index], name="Bollinger", legendgroup="bb", showlegend=False,
+                                     line=dict(color="rgba(168,181,174,0.35)", width=1), hoverinfo="skip",
+                                     fill="tonexty", fillcolor="rgba(168,181,174,0.06)"), row=1, col=1)
+        period_up = df["Close"].iloc[-1] >= df["Close"].iloc[0]
+        main_col = charts.POS if period_up else charts.NEG
+        if style.startswith("🕯️"):
+            fig.add_trace(go.Candlestick(x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
+                                         name=ticker, increasing=dict(line=dict(color=charts.POS, width=1), fillcolor=charts.POS),
+                                         decreasing=dict(line=dict(color=charts.NEG, width=1), fillcolor=charts.NEG)),
+                          row=1, col=1)
+        else:
+            lo_y = float(df["Low"].min())
+            # Ton under linjen ner till diagrammets botten (inte till noll, så att kursrörelsen syns)
+            fig.add_trace(go.Scatter(x=df.index, y=[lo_y * 0.97] * len(df), showlegend=False, hoverinfo="skip",
+                                     line=dict(width=0)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=df["Close"], name=ticker, line=dict(color=main_col, width=2),
+                                     fill="tonexty", fillcolor=charts.hex_to_rgba(main_col, 0.10),
+                                     hovertemplate="%{y:,.2f}"), row=1, col=1)
+            fig.update_yaxes(range=[lo_y * 0.97, float(df["High"].max()) * 1.02], row=1, col=1)
+        colors = {"MA20": charts.CATEGORICAL[6], "MA50": charts.CATEGORICAL[1], "MA200": charts.CATEGORICAL[0]}
+        for ma, n in (("MA20", 20), ("MA50", 50), ("MA200", 200)):
+            if ma in indicators:
+                fig.add_trace(go.Scatter(x=df.index, y=analysis.sma(close, n).loc[df.index], name=ma,
+                                         line=dict(color=colors[ma], width=1.5), hovertemplate="%{y:,.2f}"), row=1, col=1)
 
-    # Eget GAV som linje
-    if ticker in held:
-        pos = portfolio.compute_positions(tx)
-        p = pos[(pos["ticker"] == ticker) & (pos["qty"] > 0)]
-        if not p.empty:
-            gav = float(p["cost_local"].iloc[0] / p["qty"].iloc[0])
-            fig.add_hline(y=gav, line_dash="dot", line_color=charts.ACCENT, line_width=1.5, row=1, col=1,
-                          annotation_text=f"Ditt GAV {fmt_num(gav, 2)}", annotation_position="top left",
-                          annotation_font=dict(color=charts.INK_2, size=11))
-        buys = tx[(tx["ticker"] == ticker) & (tx["type"].isin(["KÖP", "SÄLJ"]))].copy()
-        buys["date"] = pd.to_datetime(buys["date"])
-        buys = buys[buys["date"] >= df.index[0]]
-        for typ, sym, col in (("KÖP", "triangle-up", charts.POS), ("SÄLJ", "triangle-down", charts.NEG)):
-            b = buys[buys["type"] == typ]
-            if not b.empty:
-                fig.add_trace(go.Scatter(x=b["date"], y=b["price"], mode="markers", name=typ,
-                                         marker=dict(symbol=sym, size=12, color=col, line=dict(width=2, color=charts.SURFACE)),
-                                         hovertemplate=f"{typ} %{{y:,.2f}}"),
-                              row=1, col=1)
+        # Eget GAV som linje
+        if ticker in held:
+            pos = portfolio.compute_positions(tx)
+            p = pos[(pos["ticker"] == ticker) & (pos["qty"] > 0)]
+            if not p.empty:
+                gav = float(p["cost_local"].iloc[0] / p["qty"].iloc[0])
+                fig.add_hline(y=gav, line_dash="dot", line_color=charts.ACCENT, line_width=1.5, row=1, col=1,
+                              annotation_text=f"Ditt GAV {fmt_num(gav, 2)}", annotation_position="top left",
+                              annotation_font=dict(color=charts.INK_2, size=11))
+            buys = tx[(tx["ticker"] == ticker) & (tx["type"].isin(["KÖP", "SÄLJ"]))].copy()
+            buys["date"] = pd.to_datetime(buys["date"])
+            buys = buys[buys["date"] >= df.index[0]]
+            for typ, sym, col in (("KÖP", "triangle-up", charts.POS), ("SÄLJ", "triangle-down", charts.NEG)):
+                b = buys[buys["type"] == typ]
+                if not b.empty:
+                    fig.add_trace(go.Scatter(x=b["date"], y=b["price"], mode="markers", name=typ,
+                                             marker=dict(symbol=sym, size=12, color=col, line=dict(width=2, color=charts.SURFACE)),
+                                             hovertemplate=f"{typ} %{{y:,.2f}}"),
+                                  row=1, col=1)
 
-    r = 2
-    if "Volym" in sub:
-        vcol = [charts.hex_to_rgba(charts.POS if c >= o else charts.NEG, 0.45) for o, c in zip(df["Open"], df["Close"])]
-        fig.add_trace(go.Bar(x=df.index, y=df["Volume"], marker_color=vcol, name="Volym", showlegend=False,
-                             hovertemplate="%{y:,.0f}"), row=r, col=1)
-        fig.update_yaxes(title_text="Volym", row=r, col=1, showgrid=False)
-        r += 1
-    if "RSI" in sub:
-        fig.add_hrect(y0=30, y1=70, fillcolor="rgba(244,239,230,0.04)", line_width=0, row=r, col=1)
-        for lvl in (30, 70):
-            fig.add_hline(y=lvl, line_color="rgba(244,239,230,0.15)", line_width=1, row=r, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=analysis.rsi(close).loc[df.index], name="RSI", showlegend=False,
-                                 line=dict(color=charts.CATEGORICAL[6], width=1.5), hovertemplate="%{y:.0f}"), row=r, col=1)
-        fig.update_yaxes(title_text="RSI", range=[0, 100], tickvals=[30, 70], row=r, col=1)
-        r += 1
-    if "MACD" in sub:
-        line, sig, hist = analysis.macd(close)
-        fig.add_trace(go.Bar(x=df.index, y=hist.loc[df.index], name="MACD hist", showlegend=False,
-                             marker_color=[charts.hex_to_rgba(charts.POS if v >= 0 else charts.NEG, 0.5)
-                                           for v in hist.loc[df.index]], hovertemplate="%{y:.2f}"), row=r, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=line.loc[df.index], name="MACD", showlegend=False,
-                                 line=dict(color=charts.CATEGORICAL[0], width=1.5), hovertemplate="%{y:.2f}"), row=r, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=sig.loc[df.index], name="Signal", showlegend=False,
-                                 line=dict(color=charts.CATEGORICAL[1], width=1.5), hovertemplate="%{y:.2f}"), row=r, col=1)
-        fig.update_yaxes(title_text="MACD", row=r, col=1)
+        r = 2
+        if "Volym" in sub:
+            vcol = [charts.hex_to_rgba(charts.POS if c >= o else charts.NEG, 0.45) for o, c in zip(df["Open"], df["Close"])]
+            fig.add_trace(go.Bar(x=df.index, y=df["Volume"], marker_color=vcol, name="Volym", showlegend=False,
+                                 hovertemplate="%{y:,.0f}"), row=r, col=1)
+            fig.update_yaxes(title_text="Volym", row=r, col=1, showgrid=False)
+            r += 1
+        if "RSI" in sub:
+            fig.add_hrect(y0=30, y1=70, fillcolor="rgba(244,239,230,0.04)", line_width=0, row=r, col=1)
+            for lvl in (30, 70):
+                fig.add_hline(y=lvl, line_color="rgba(244,239,230,0.15)", line_width=1, row=r, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=analysis.rsi(close).loc[df.index], name="RSI", showlegend=False,
+                                     line=dict(color=charts.CATEGORICAL[6], width=1.5), hovertemplate="%{y:.0f}"), row=r, col=1)
+            fig.update_yaxes(title_text="RSI", range=[0, 100], tickvals=[30, 70], row=r, col=1)
+            r += 1
+        if "MACD" in sub:
+            line, sig, hist = analysis.macd(close)
+            fig.add_trace(go.Bar(x=df.index, y=hist.loc[df.index], name="MACD hist", showlegend=False,
+                                 marker_color=[charts.hex_to_rgba(charts.POS if v >= 0 else charts.NEG, 0.5)
+                                               for v in hist.loc[df.index]], hovertemplate="%{y:.2f}"), row=r, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=line.loc[df.index], name="MACD", showlegend=False,
+                                     line=dict(color=charts.CATEGORICAL[0], width=1.5), hovertemplate="%{y:.2f}"), row=r, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=sig.loc[df.index], name="Signal", showlegend=False,
+                                     line=dict(color=charts.CATEGORICAL[1], width=1.5), hovertemplate="%{y:.2f}"), row=r, col=1)
+            fig.update_yaxes(title_text="MACD", row=r, col=1)
 
-    fig.update_layout(xaxis_rangeslider_visible=False, bargap=0.15, barcornerradius=1)
-    fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])], showgrid=False)
-    charts.show(fig, height=520 + 140 * len(sub))
+        fig.update_layout(xaxis_rangeslider_visible=False, bargap=0.15, barcornerradius=1)
+        fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])], showgrid=False)
+        charts.show(fig, height=520 + 140 * len(sub))
 
-    # ---------- Signaler + nyckeltal ----------
-    left, mid, right = st.columns([1.1, 1, 1])
-    with left:
-        st.subheader("Tekniska signaler")
-        sigs = analysis.technical_signals(full)
-        score = analysis.signal_score(sigs)
-        st.caption(f"Nettopoäng: **{score:+d}** (positiva − negativa signaler)")
-        for s in sigs:
-            signal_card(s["signal"], s["detail"], s["tone"])
-    with mid:
-        st.subheader("Avkastning")
-        pr = analysis.period_returns(close)
-        begrepp.table([(k_, fmt_pct(v)) for k_, v in pr.items()], "Period", "Avkastning")
-        st.subheader("Risk (vald period)")
-        stats = analysis.perf_stats(df["Close"])
-        bench = market.get_closes(("^OMX" if ticker.endswith(".ST") else "^GSPC",), period=fetch)
-        b = analysis.beta(df["Close"], bench.iloc[:, 0].loc[bench.index >= df.index[0]]) if not bench.empty else None
-        rows_ = [(k_, fmt_pct(v) if k_ not in ("Sharpe", "Sortino") else fmt_num(v, 2)) for k_, v in stats.items()]
-        rows_.append(("Beta mot " + ("OMXS30" if ticker.endswith(".ST") else "S&P 500"), fmt_num(b, 2)))
-        begrepp.table(rows_, "Mått", "Värde")
-    with right:
-        st.subheader("Nyckeltal")
-        fund = [
-            ("P/E (12m)", fmt_num(info.get("trailingPE"), 1)),
-            ("P/E (framåt)", fmt_num(info.get("forwardPE"), 1)),
-            ("PEG", fmt_num(info.get("trailingPegRatio") or info.get("pegRatio"), 2)),
-            ("P/S", fmt_num(info.get("priceToSalesTrailing12Months"), 1)),
-            ("EV/EBITDA", fmt_num(info.get("enterpriseToEbitda"), 1)),
-            ("ROE", fmt_pct(info.get("returnOnEquity"), 1, sign=False) if info.get("returnOnEquity") else "–"),
-            ("Vinstmarginal", fmt_pct(info.get("profitMargins"), 1, sign=False) if info.get("profitMargins") else "–"),
-            ("Bruttomarginal", fmt_pct(info.get("grossMargins"), 1, sign=False) if info.get("grossMargins") else "–"),
-            ("Omsättningstillväxt", fmt_pct(info.get("revenueGrowth")) if info.get("revenueGrowth") else "–"),
-            ("Vinsttillväxt", fmt_pct(info.get("earningsGrowth")) if info.get("earningsGrowth") else "–"),
-            ("Skuld/EK (%)", fmt_num(info.get("debtToEquity"), 0)),
-            ("Utdelningsandel", fmt_pct(info.get("payoutRatio"), 0, sign=False) if info.get("payoutRatio") else "–"),
-            ("Analytikers riktkurs", f"{fmt_num(info.get('targetMeanPrice'), 1)} {cur}" if info.get("targetMeanPrice") else "–"),
-            ("Analytikerkonsensus", (info.get("recommendationKey") or "–").replace("_", " ")),
-        ]
-        begrepp.table(fund, "Nyckeltal", "Värde")
+        # ---------- Signaler + nyckeltal ----------
+        left, mid, right = st.columns([1.1, 1, 1])
+        with left:
+            st.subheader("Tekniska signaler")
+            sigs = analysis.technical_signals(full)
+            score = analysis.signal_score(sigs)
+            st.caption(f"Nettopoäng: **{score:+d}** (positiva − negativa signaler)")
+            for s in sigs:
+                signal_card(s["signal"], s["detail"], s["tone"])
+        with mid:
+            st.subheader("Avkastning")
+            pr = analysis.period_returns(close)
+            begrepp.table([(k_, fmt_pct(v)) for k_, v in pr.items()], "Period", "Avkastning")
+            st.subheader("Risk (vald period)")
+            stats = analysis.perf_stats(df["Close"])
+            bench = market.get_closes(("^OMX" if ticker.endswith(".ST") else "^GSPC",), period=fetch)
+            b = analysis.beta(df["Close"], bench.iloc[:, 0].loc[bench.index >= df.index[0]]) if not bench.empty else None
+            rows_ = [(k_, fmt_pct(v) if k_ not in ("Sharpe", "Sortino") else fmt_num(v, 2)) for k_, v in stats.items()]
+            rows_.append(("Beta mot " + ("OMXS30" if ticker.endswith(".ST") else "S&P 500"), fmt_num(b, 2)))
+            begrepp.table(rows_, "Mått", "Värde")
+        with right:
+            st.subheader("Nyckeltal")
+            fund = [
+                ("P/E (12m)", fmt_num(info.get("trailingPE"), 1)),
+                ("P/E (framåt)", fmt_num(info.get("forwardPE"), 1)),
+                ("PEG", fmt_num(info.get("trailingPegRatio") or info.get("pegRatio"), 2)),
+                ("P/S", fmt_num(info.get("priceToSalesTrailing12Months"), 1)),
+                ("EV/EBITDA", fmt_num(info.get("enterpriseToEbitda"), 1)),
+                ("ROE", fmt_pct(info.get("returnOnEquity"), 1, sign=False) if info.get("returnOnEquity") else "–"),
+                ("Vinstmarginal", fmt_pct(info.get("profitMargins"), 1, sign=False) if info.get("profitMargins") else "–"),
+                ("Bruttomarginal", fmt_pct(info.get("grossMargins"), 1, sign=False) if info.get("grossMargins") else "–"),
+                ("Omsättningstillväxt", fmt_pct(info.get("revenueGrowth")) if info.get("revenueGrowth") else "–"),
+                ("Vinsttillväxt", fmt_pct(info.get("earningsGrowth")) if info.get("earningsGrowth") else "–"),
+                ("Skuld/EK (%)", fmt_num(info.get("debtToEquity"), 0)),
+                ("Utdelningsandel", fmt_pct(info.get("payoutRatio"), 0, sign=False) if info.get("payoutRatio") else "–"),
+                ("Analytikers riktkurs", f"{fmt_num(info.get('targetMeanPrice'), 1)} {cur}" if info.get("targetMeanPrice") else "–"),
+                ("Analytikerkonsensus", (info.get("recommendationKey") or "–").replace("_", " ")),
+            ]
+            begrepp.table(fund, "Nyckeltal", "Värde")
 
-    if summary := info.get("longBusinessSummary"):
-        with st.expander("Om bolaget"):
-            st.write(summary)
+        if summary := info.get("longBusinessSummary"):
+            with st.expander("Om bolaget"):
+                st.write(summary)
 
-    # ---------- Nyheter, insyn och kalender ----------
-    import handelser as h
-    import sida_handelser
-    st.subheader("Senaste om bolaget")
-    n1, n2, n3 = st.tabs(["📰 Nyheter", "🕵️ Insynshandel", "📅 Kalender"])
-    with n1:
-        with st.spinner("Hämtar nyheter …"):
-            sida_handelser.news_list(h.news(ticker, limit=8))
-    with n2:
-        with st.spinner("Hämtar insynshandel …"):
-            sida_handelser.insider_view(ticker, compact=True)
-    with n3:
-        cal = h.calendar(ticker)
-        c = st.columns(3)
-        nxt = next((d for d in cal["earnings"] if d >= h.dt.date.today()), None)
-        c[0].metric("Nästa rapport", h.fmt_date(nxt), h.days_text(nxt) or None, delta_color="off")
-        c[1].metric("X-dag", h.fmt_date(cal["ex_div"]), h.days_text(cal["ex_div"]) or None, delta_color="off")
-        c[2].metric("Utbetalning", h.fmt_date(cal["div_pay"]), h.days_text(cal["div_pay"]) or None, delta_color="off")
-        hist_div = h.dividend_history(ticker)
-        if not hist_div.empty:
-            yearly = hist_div.groupby(hist_div.index.year).sum().tail(10)
-            figd = go.Figure(go.Bar(x=[str(y) for y in yearly.index], y=yearly.values, marker_color=charts.ACCENT,
-                                    width=0.6, hovertemplate="%{x}: %{y:.2f} " + cur + "<extra></extra>"))
-            figd.update_layout(hovermode="closest", title="Utdelning per aktie och år", xaxis=dict(showgrid=False))
-            charts.show(figd, height=240)
+    with tab_more:
+        # ---------- Nyheter, insyn och kalender ----------
+        import handelser as h
+        import sida_handelser
+        st.subheader("Senaste om bolaget")
+        n1, n2, n3 = st.tabs(["📰 Nyheter", "🕵️ Insynshandel", "📅 Kalender"])
+        with n1:
+            with st.spinner("Hämtar nyheter …"):
+                sida_handelser.news_list(h.news(ticker, limit=8))
+        with n2:
+            with st.spinner("Hämtar insynshandel …"):
+                sida_handelser.insider_view(ticker, compact=True)
+        with n3:
+            cal = h.calendar(ticker)
+            c = st.columns(3)
+            nxt = next((d for d in cal["earnings"] if d >= h.dt.date.today()), None)
+            c[0].metric("Nästa rapport", h.fmt_date(nxt), h.days_text(nxt) or None, delta_color="off")
+            c[1].metric("X-dag", h.fmt_date(cal["ex_div"]), h.days_text(cal["ex_div"]) or None, delta_color="off")
+            c[2].metric("Utbetalning", h.fmt_date(cal["div_pay"]), h.days_text(cal["div_pay"]) or None, delta_color="off")
+            hist_div = h.dividend_history(ticker)
+            if not hist_div.empty:
+                yearly = hist_div.groupby(hist_div.index.year).sum().tail(10)
+                figd = go.Figure(go.Bar(x=[str(y) for y in yearly.index], y=yearly.values, marker_color=charts.ACCENT,
+                                        width=0.6, hovertemplate="%{x}: %{y:.2f} " + cur + "<extra></extra>"))
+                figd.update_layout(hovermode="closest", title="Utdelning per aktie och år", xaxis=dict(showgrid=False))
+                charts.show(figd, height=240)
 
-    # ---------- Jämförelse ----------
-    st.subheader("Jämför utveckling")
-    others = st.multiselect("Lägg till tickers/index", options=sorted(set(held) | set(market.BENCHMARKS.values())),
-                            default=["^OMX"] if ticker.endswith(".ST") else ["^GSPC"],
-                            accept_new_options=True)
-    comp = market.get_closes(tuple(dict.fromkeys([ticker, *others])), start=df.index[0].strftime("%Y-%m-%d"))
-    if not comp.empty:
-        norm = comp.ffill().apply(lambda s: s / s.dropna().iloc[0] * 100 if s.notna().any() else s)
-        fig2 = go.Figure()
-        others_cols = [c for c in norm.columns if c != ticker]
-        for i, col in enumerate(others_cols):
-            fig2.add_trace(go.Scatter(x=norm.index, y=norm[col], name=col, hovertemplate="%{y:.1f}",
-                                      line=dict(color=charts.CATEGORICAL[i % len(charts.CATEGORICAL)], width=1.5)))
-        if ticker in norm.columns:
-            fig2.add_trace(go.Scatter(x=norm.index, y=norm[ticker], name=ticker, hovertemplate="%{y:.1f}",
-                                      line=dict(color=charts.ACCENT, width=2.5)))
-        fig2.add_hline(y=100, line_color="rgba(244,239,230,0.2)", line_width=1)
-        fig2.update_layout(yaxis_title="Index (start = 100)")
-        charts.show(fig2, height=360)
+        # ---------- Jämförelse ----------
+        st.subheader("Jämför utveckling")
+        others = st.multiselect("Lägg till tickers/index", options=sorted(set(held) | set(market.BENCHMARKS.values())),
+                                default=["^OMX"] if ticker.endswith(".ST") else ["^GSPC"],
+                                accept_new_options=True)
+        comp = market.get_closes(tuple(dict.fromkeys([ticker, *others])), start=df.index[0].strftime("%Y-%m-%d"))
+        if not comp.empty:
+            norm = comp.ffill().apply(lambda s: s / s.dropna().iloc[0] * 100 if s.notna().any() else s)
+            fig2 = go.Figure()
+            others_cols = [c for c in norm.columns if c != ticker]
+            for i, col in enumerate(others_cols):
+                fig2.add_trace(go.Scatter(x=norm.index, y=norm[col], name=col, hovertemplate="%{y:.1f}",
+                                          line=dict(color=charts.CATEGORICAL[i % len(charts.CATEGORICAL)], width=1.5)))
+            if ticker in norm.columns:
+                fig2.add_trace(go.Scatter(x=norm.index, y=norm[ticker], name=ticker, hovertemplate="%{y:.1f}",
+                                          line=dict(color=charts.ACCENT, width=2.5)))
+            fig2.add_hline(y=100, line_color="rgba(244,239,230,0.2)", line_width=1)
+            fig2.update_layout(yaxis_title="Index (start = 100)")
+            charts.show(fig2, height=360)
 
     st.caption(DISCLAIMER)
 
