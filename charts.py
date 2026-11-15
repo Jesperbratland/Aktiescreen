@@ -31,11 +31,13 @@ SEQUENTIAL_BLUE = ["#184f95", "#1c5cab", "#256abf", "#2a78d6", "#3987e5", "#5598
 FONT = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
 
-def _axis(**extra) -> dict:
-    return dict(showgrid=True, gridcolor=GRID, gridwidth=1, zeroline=False, showline=False,
+def _axis(**overrides) -> dict:
+    base = dict(showgrid=True, gridcolor=GRID, gridwidth=1, zeroline=False, showline=False,
                 ticks="", tickfont=dict(color=INK_3, size=11), title=dict(font=dict(color=INK_2, size=12)),
                 showspikes=True, spikemode="across", spikethickness=1, spikedash="solid",
-                spikecolor="rgba(244,239,230,0.25)", spikesnap="cursor", **extra)
+                spikecolor="rgba(244,239,230,0.25)", spikesnap="cursor")
+    base.update(overrides)
+    return base
 
 
 _template = go.layout.Template(
