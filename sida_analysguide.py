@@ -73,7 +73,7 @@ def _portfolio_context(ticker: str, sector: str) -> dict:
 def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
     with st.spinner("Analyserar …"):
         res = ag.analyze(ticker, hist, info)
-    d, c = res["decision"], res["company"]
+    d, c, prof = res["decision"], res["company"], res["profile"]
 
     # ---------- Sammanfattning ----------
     with st.container(border=True):
@@ -89,6 +89,8 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
                 st.markdown(d["timing"])
             if d.get("capped"):
                 st.caption("⚠️ " + d["capped"])
+            st.caption(f"🏭 Anpassad för branschen **{prof['name'].lower()}**"
+                       + (" (cyklisk)" if prof["cyclical"] else "") + " · nyheter och insynshandel är invägda.")
             pills = "".join(
                 f"<div class='pill {'pos' if s == s and s >= 70 else 'neg' if s == s and s < 50 else ''}'>"
                 f"<span>{k}</span><b>{'–' if s != s else f'{s:.0f}'}</b></div>" for k, s in d["parts"].items())
@@ -96,8 +98,8 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
     st.caption("Gå igenom flikarna i tur och ordning – precis som en analytiker gör. Varje rad visar 🟢 bra, "
                "🟡 okej eller 🔴 varning och förklarar varför. Håll över ⓘ för att se vad begreppet betyder.")
 
-    t1, t2, t3, t4, t5, t6 = st.tabs(["1 · Bolaget", "2 · Kvalitet", "3 · Värdering", "4 · Trend & köpsignal",
-                                      "5 · Risk & storlek", "6 · Beslut"])
+    t1, t2, t3, tn, t4, t5, t6 = st.tabs(["1 · Bolaget", "2 · Kvalitet", "3 · Värdering", "4 · Nyheter",
+                                          "5 · Trend & köpsignal", "6 · Risk & storlek", "7 · Beslut"])
 
     # 1. Bolaget
     with t1:
@@ -108,6 +110,12 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
         k[1].metric("Land", c["country"] or "–")
         k[2].metric("Storlek", c["size"].split(" (")[0], help=begrepp.TERMS["Börsvärde"])
         k[3].metric("Anställda", fmt_num(c["employees"], 0) if c["employees"] else "–")
+        with st.container(border=True):
+            st.markdown(f"**🏭 Så bedöms {prof['name'].lower()}**")
+            st.markdown(prof["focus"])
+            st.caption("Gränserna för 🟢🟡🔴, typiskt P/E och vilka värderingsmodeller som används är anpassade "
+                       "efter branschen." + (" Branschen är cyklisk – lågt P/E räknas inte automatiskt som billigt."
+                                             if prof["cyclical"] else ""))
         if c["summary"]:
             st.markdown(c["summary"][:700] + ("…" if len(c["summary"]) > 700 else ""))
             if len(c["summary"]) > 700:
@@ -126,7 +134,7 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
     with t2:
         _step_header("2 · Är det ett bra bolag?", res["quality"]["score"],
                      "Kvalitetsbolag tjänar mycket på sitt kapital, har bra marginaler, växer och har lagom med skulder. "
-                     "De klarar sig ofta bättre i sämre tider.")
+                     f"De klarar sig ofta bättre i sämre tider. Gränserna är satta för {prof['name'].lower()}.")
         _rows(res["quality"]["items"])
 
     # 3. Värdering
@@ -139,7 +147,8 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
         fair = v["fair"]
         st.markdown("##### 💡 Vad är ett rimligt pris?")
         if "mid" not in fair:
-            st.caption("Det finns för lite data (vinst, eget kapital eller utdelning) för att räkna fram ett rimligt värde.")
+            st.caption("Det finns för lite data (vinst, eget kapital eller utdelning) för att räkna fram ett rimligt värde."
+                       + (" " + fair["skipped_note"] if fair.get("skipped_note") else ""))
         else:
             price = res["price"]
             k = st.columns(3)
@@ -148,6 +157,8 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
                         f"{fair['margin'] * 100:+.0f} %".replace(".", ","), delta_color="normal")
             k[2].metric("Spann", f"{fmt_num(fair['low'], 0)}–{fmt_num(fair['high'], 0)} {cur}")
             st.markdown(f"**{fair['verdict']}** – {fair['why']}")
+            if fair.get("skipped_note"):
+                st.caption(fair["skipped_note"])
             fig = go.Figure()
             for i, (name, val, _) in enumerate(fair["methods"]):
                 if val == val and val > 0:
@@ -169,10 +180,35 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
                                 f"kraftigt från de andra metoderna. {how}")
                 st.caption("Alla modeller är förenklingar. Använd spannet som en fingervisning – inte ett exakt pris.")
 
-    # 4. Trend
+    # 4. Nyheter
+    with tn:
+        n = res["news"]
+        _step_header("4 · Vad händer i bolaget just nu?", n.get("score"),
+                     "Siffrorna ovan bygger på senaste rapporten. Nyheter som vinstvarningar, nyemissioner, stora "
+                     "order eller höjd prognos kan ändra bilden snabbt – därför vägs de in.")
+        for r_ in n.get("red", [])[:3]:
+            st.warning(f"**{', '.join(r_['flags']).capitalize()}:** [{r_['title']}]({r_['url']}) "
+                       f"· {r_['source']}")
+        _rows(n.get("items", []))
+        heads = n.get("headlines", [])
+        if heads:
+            st.markdown("##### 📰 Senaste rubrikerna")
+            from handelser import ago
+            for h_ in heads:
+                dot = "🟢" if h_["tone"] > 0 else "🔴" if h_["tone"] < 0 else "⚪"
+                when = ago(h_["ts"]) if h_.get("ts") is not None else ""
+                st.markdown(f"{dot} [{h_['title']}]({h_['url']})  \n"
+                            f"<span class='small-muted'>{html.escape(h_['source'])} · {when}</span>",
+                            unsafe_allow_html=True)
+            st.caption("🟢 positiv · 🔴 negativ · ⚪ neutral rubrik. Tonen bedöms automatiskt med nyckelord, så den "
+                       "kan bli fel – läs alltid själva nyheten innan du agerar.")
+        else:
+            st.caption("Hittade inga nyheter om bolaget de senaste veckorna.")
+
+    # 5. Trend
     with t4:
         t = res["trend"]
-        _step_header("4 · Är det rätt läge att köpa?", t["score"],
+        _step_header("5 · Är det rätt läge att köpa?", t["score"],
                      "Trend och momentum säger inget om bolaget, men mycket om timing. Att köpa i en upptrend minskar "
                      "risken att köpa något som fortsätter falla.")
         _rows(t["items"])
@@ -194,7 +230,7 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
     # 5. Risk & storlek
     with t5:
         r = res["risk"]
-        _step_header("5 · Hur riskabel är den – och hur mycket ska jag köpa?", r["score"],
+        _step_header("6 · Hur riskabel är den – och hur mycket ska jag köpa?", r["score"],
                      "Ju mer en aktie svänger, desto mindre del av portföljen bör den vara. Då klarar du ett ras utan "
                      "att hela sparandet tar stryk.")
         _rows(r["items"])
@@ -227,7 +263,7 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
 
     # 6. Beslut
     with t6:
-        _step_header("6 · Beslut", d["total"], "Väg ihop allt. Ingen aktie är perfekt – frågan är om fördelarna "
+        _step_header("7 · Beslut", d["total"], "Väg ihop allt. Ingen aktie är perfekt – frågan är om fördelarna "
                                                "väger tyngre än nackdelarna, och om priset är rätt.")
         st.markdown(f"### {d['verdict']}")
         a, b = st.columns(2)
@@ -269,8 +305,11 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
             db.save_watchlist(wl)
             st.toast("Tillagd i bevakningslistan med köplarm", icon="👀")
         if z.button("🐺 Fråga Vargen om aktien", use_container_width=True, key=f"g_varg_{ticker}"):
-            st.session_state["vargen_pending"] = (f"Vad tycker du om {c['name'] or ticker} ({ticker})? "
-                                                  f"Min analysguide säger {d['verdict']} ({d['total']:.0f}/100).")
+            heads = "; ".join(h_["title"] for h_ in res["news"].get("headlines", [])[:5])
+            st.session_state["vargen_pending"] = (
+                f"Vad tycker du om {c['name'] or ticker} ({ticker})? Bransch: {prof['name']}. "
+                f"Min analysguide säger {d['verdict']} ({d['total']:.0f}/100)."
+                + (f" Senaste rubrikerna: {heads}. Väg in nyheterna och vad som är viktigt i branschen." if heads else ""))
             st.switch_page(st.session_state["_pages"]["vargen"])
         st.caption("Guiden bygger på vanliga tumregler och data från Yahoo Finance, som kan vara ofullständig. "
                    "Det är inte finansiell rådgivning – gör alltid din egen bedömning.")

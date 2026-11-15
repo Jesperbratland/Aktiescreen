@@ -41,6 +41,16 @@ TERMS: dict[str, str] = {
                         "de pengarna som kan bli utdelning, återköp eller ny tillväxt.",
     "Rimligt värde": "En uppskattning av vad aktien borde vara värd, räknat på flera sätt (vinst, eget kapital, "
                      "utdelning, analytiker). Plus = aktien kostar mindre än det uppskattade värdet.",
+    "Insynshandel": "När personer i bolagets ledning eller styrelse köper eller säljer aktier i bolaget. Köp ses "
+                    "ofta som ett gott tecken – de känner bolaget bäst.",
+    "Substansvärde": "Vad bolagets tillgångar är värda minus skulderna, per aktie. Viktigt för investmentbolag och "
+                     "fastighetsbolag. Handlas aktien under substansvärdet kallas det rabatt.",
+    "Cyklisk": "Bolag vars vinst följer konjunkturen (t.ex. industri, råvaror, bilar). Lågt P/E kan där betyda att "
+               "vinsten är på topp, inte att aktien är billig.",
+    "Nyhetsläget": "Tonen i de senaste rubrikerna om bolaget, bedömd automatiskt med nyckelord (t.ex. "
+                   "vinstvarning, höjd prognos, stor order). Läs alltid själva nyheterna.",
+    "Kassan räcker": "Hur många år bolagets kassa räcker om det fortsätter förbruka pengar i samma takt. Under "
+                     "1–2 år ökar risken för nyemission.",
     "Från 52v-högsta": "Hur långt under årets högsta kurs aktien ligger. Nära 0 = stark aktie.",
     "Analytikers riktkurs": "Genomsnittet av analytikernas bedömning av vad aktien är värd om ca ett år. "
                             "Ofta fel – se det som en fingervisning.",
