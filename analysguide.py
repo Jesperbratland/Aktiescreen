@@ -203,12 +203,16 @@ def valuation(info: dict, price: float) -> dict:
     if _ok(eps) and eps > 0:
         methods.append(("Vinst × branschens P/E", eps * typ,
                         f"Förväntad vinst per aktie ({_n(eps, 2)}) × typiskt P/E för branschen ({typ})."))
-    if _ok(eps_t) and _ok(book) and eps_t > 0 and book > 0:
+    pb_now = price / book if _ok(book) and book > 0 and price else float("nan")
+    payout = _f(info.get("payoutRatio"))
+    # Grahams tal passar bara bolag med lågt P/B (Graham: P/E × P/B ≤ 22,5) – annars blir värdet orimligt lågt
+    if _ok(eps_t) and _ok(book) and eps_t > 0 and book > 0 and (not _ok(pb_now) or pb_now <= 3):
         methods.append(("Grahams tal", math.sqrt(22.5 * eps_t * book),
                         "Benjamin Grahams klassiska formel: √(22,5 × vinst per aktie × eget kapital per aktie). "
                         "Försiktig – passar stabila bolag."))
     div = _f(info.get("dividendRate"))
-    if _ok(div) and div > 0:
+    # Utdelningsmodellen passar bolag som delar ut en stor del av vinsten
+    if _ok(div) and div > 0 and (not _ok(payout) or payout >= 0.35):
         g = _f(info.get("earningsGrowth"))
         g = min(max(g if _ok(g) else 0.03, 0.0), 0.05)
         methods.append(("Utdelningsmodell", div * (1 + g) / (REQUIRED_RETURN - g),
@@ -216,17 +220,27 @@ def valuation(info: dict, price: float) -> dict:
                         "avkastningskrav."))
     if _ok(target):
         methods.append(("Analytikernas riktkurs", target, "Snittet av analytikernas bedömningar."))
-    vals = [v for _, v, _ in methods if _ok(v) and v > 0]
-    fair = {"methods": methods}
+    # Rensa metoder som avviker kraftigt från de övriga (t.ex. Grahams tal för ett snabbväxande bolag)
+    methods = [(n, v, how) for n, v, how in methods if _ok(v) and v > 0]
+    used, dropped = list(methods), []
+    if len(methods) >= 3:
+        med = float(np.median([v for _, v, _ in methods]))
+        used = [m for m in methods if med / 2.2 <= m[1] <= med * 2.2]
+        dropped = [m for m in methods if m not in used]
+    vals = [v for _, v, _ in used]
+    fair = {"methods": used, "dropped": dropped}
     if vals:
         mid = float(np.median(vals))
+        spread = max(vals) / min(vals) if min(vals) > 0 else float("inf")
+        fair["uncertain"] = len(vals) < 2 or spread > 2.0
         fair.update(low=float(min(vals)), mid=mid, high=float(max(vals)),
                     margin=mid / price - 1 if price else float("nan"))
         m = fair["margin"]
         fair["verdict"] = ("🟢 Ser billig ut" if m >= 0.20 else "🟡 Rimligt värderad" if m >= -0.10
                            else "🔴 Ser dyr ut")
         fair["why"] = (f"Mittenvärdet av {len(vals)} metoder är {_n(mid, 1)} mot dagens kurs {_n(price, 1)} – "
-                       + (f"en säkerhetsmarginal på {_pct(m)}." if m >= 0 else f"aktien kostar {_pct(-m)} mer."))
+                       + (f"en säkerhetsmarginal på {_pct(m)}." if m >= 0 else f"aktien kostar {_pct(-m)} mer.")
+                       + (" Metoderna spretar mycket, så uppskattningen är osäker." if fair["uncertain"] else ""))
         st_ = "good" if m >= 0.20 else "ok" if m >= -0.10 else "bad"
         items.append(_item("Rimligt värde", f"{_n(mid, 1)} ({_pct(m, 0, sign=True)})", st_, fair["why"],
                            term="Rimligt värde"))
@@ -334,6 +348,13 @@ def decision(q: dict, v: dict, t: dict, r: dict) -> dict:
         verdict, color = "🟡 Avvakta – bevaka och vänta på bättre läge", "neu"
     else:
         verdict, color = "🔴 Undvik just nu", "neg"
+    fair = v.get("fair", {})
+    margin = fair.get("margin", float("nan"))
+    capped = None
+    if _ok(total) and _ok(margin) and margin < -0.10 and not fair.get("uncertain") and total >= 60:
+        total, verdict, color = 59.0, "🟡 Avvakta – bra bolag men priset är högt", "neu"
+        capped = (f"Poängen är begränsad eftersom aktien kostar {_pct(-margin)} mer än det uppskattade "
+                  "rimliga värdet.")
     vs, ts = v["score"], t["score"]
     if _ok(vs) and _ok(ts):
         if vs >= 60 and ts >= 60:
@@ -352,7 +373,36 @@ def decision(q: dict, v: dict, t: dict, r: dict) -> dict:
     pros = [f"{i['label']}: {i['why']}" for _, i in all_items if i["status"] == "good"][:5]
     cons = [f"{i['label']}: {i['why']}" for _, i in all_items if i["status"] == "bad"][:5]
     return {"total": total, "parts": parts, "verdict": verdict, "color": color, "timing": timing,
-            "pros": pros, "cons": cons}
+            "pros": pros, "cons": cons, "capped": capped}
+
+
+def next_step(res: dict) -> dict:
+    """Ett förslag som hänger ihop med beslutet: köp nu, köp vid rekyl eller bevaka till ett rimligt pris."""
+    d, price = res["decision"], res["price"]
+    fair = res["valuation"]["fair"]
+    mid = fair.get("mid", float("nan"))
+    ma50 = res.get("ma50", float("nan"))
+    tot = d["total"]
+    if not _ok(tot):
+        return {"action": "watch", "price": round(price * 0.95, 2),
+                "why": "För lite data – bevaka aktien och läs på mer innan du bestämmer dig."}
+    if tot >= 60:
+        dip = ma50 if _ok(ma50) and price * 0.85 <= ma50 < price else price * 0.95
+        return {"action": "buy", "price": round(dip, 2),
+                "why": ("Analysen talar för ett köp till dagens pris. Vill du hellre köpa lite billigare kan du "
+                        f"bevaka och få larm vid {_n(dip, 2)}"
+                        + (" – kursens 50-dagarssnitt, där aktien ofta brukar studsa." if _ok(ma50) and dip == ma50
+                           else " (5 % under dagens kurs).")
+                        + " Ett vanligt sätt är att köpa hälften nu och resten vid en rekyl.")}
+    if _ok(mid) and mid < price:
+        target = mid * 0.95
+        return {"action": "watch", "price": round(target, 2),
+                "why": (f"Aktien ser dyr ut just nu. Ett rimligt värde är ca {_n(mid, 1)}; med 5 % marginal blir "
+                        f"köpkursen {_n(target, 2)} ({_pct(target / price - 1, 0, sign=True)} från idag).")}
+    target = ma50 if _ok(ma50) and ma50 < price else price * 0.95
+    return {"action": "watch", "price": round(target, 2),
+            "why": ("Priset är okej men trenden eller kvaliteten övertygar inte än. Bevaka och få larm vid "
+                    f"{_n(target, 2)} ({_pct(target / price - 1, 0, sign=True)}) – eller vänta tills trenden vänder upp.")}
 
 
 def analyze(ticker: str, hist: pd.DataFrame, info: dict) -> dict:
@@ -364,5 +414,7 @@ def analyze(ticker: str, hist: pd.DataFrame, info: dict) -> dict:
     q, v = quality(info), valuation(info, price)
     t = trend(hist, bench)
     r = risk(hist, bench, c["mcap_sek"])
+    ma50 = analysis.sma(hist["Close"].dropna(), 50).iloc[-1] if len(hist) >= 50 else float("nan")
     return {"company": c, "quality": q, "valuation": v, "trend": t, "risk": r,
-            "decision": decision(q, v, t, r), "price": price, "bench_name": "OMXS30" if bench_t == "^OMX" else "S&P 500"}
+            "decision": decision(q, v, t, r), "price": price, "ma50": float(ma50),
+            "bench_name": "OMXS30" if bench_t == "^OMX" else "S&P 500"}

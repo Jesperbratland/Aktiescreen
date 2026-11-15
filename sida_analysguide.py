@@ -87,6 +87,8 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
             st.markdown(f"### {d['verdict']}")
             if d["timing"]:
                 st.markdown(d["timing"])
+            if d.get("capped"):
+                st.caption("⚠️ " + d["capped"])
             pills = "".join(
                 f"<div class='pill {'pos' if s == s and s >= 70 else 'neg' if s == s and s < 50 else ''}'>"
                 f"<span>{k}</span><b>{'–' if s != s else f'{s:.0f}'}</b></div>" for k, s in d["parts"].items())
@@ -162,6 +164,9 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
             with st.expander("Hur räknas det?"):
                 for name, val, how in fair["methods"]:
                     st.markdown(f"**{name}: {fmt_num(val, 2)} {cur}**  \n{how}")
+                for name, val, how in fair.get("dropped", []):
+                    st.markdown(f"~~{name}: {fmt_num(val, 2)} {cur}~~ – räknas inte med eftersom den avviker "
+                                f"kraftigt från de andra metoderna. {how}")
                 st.caption("Alla modeller är förenklingar. Använd spannet som en fingervisning – inte ett exakt pris.")
 
     # 4. Trend
@@ -243,22 +248,29 @@ def render_guide(ticker: str, hist: pd.DataFrame, info: dict, cur: str) -> None:
         if done == len(checks):
             st.success("Bra jobbat – du har gjort en ordentlig analys. Beslutet är ditt.")
         st.markdown("**Nästa steg**")
+        ns = ag.next_step(res)
+        st.info(ns["why"])
         x, y, z = st.columns(3)
-        fair = res["valuation"]["fair"]
-        buy_at = round(min(fair.get("low", res["price"] * 0.95), res["price"] * 0.95), 2)
-        if x.button(f"👀 Bevaka med köpkurs {fmt_num(buy_at, 2)}", use_container_width=True, key=f"g_watch_{ticker}"):
+        if ns["action"] == "buy":
+            if x.button("🛒 Registrera köp", type="primary", use_container_width=True, key=f"g_buy_{ticker}"):
+                st.switch_page(st.session_state["_pages"]["transaktioner"])
+            watch_label = f"👀 Bevaka – larm vid {fmt_num(ns['price'], 2)}"
+            watch_col = y
+        else:
+            watch_label = f"👀 Bevaka – köpkurs {fmt_num(ns['price'], 2)}"
+            watch_col = x
+        if watch_col.button(watch_label, use_container_width=True, key=f"g_watch_{ticker}",
+                            type="secondary" if ns["action"] == "buy" else "primary"):
             db.add_watch(ticker, c["name"] or ticker, res["price"])
             wl = db.load_watchlist()
-            wl.loc[wl["ticker"] == ticker, "buy_below"] = buy_at
-            note = f"Analys {pd.Timestamp.today():%Y-%m-%d}: {d['verdict']} ({d['total']:.0f}/100)"
-            wl.loc[wl["ticker"] == ticker, "note"] = note
+            wl.loc[wl["ticker"] == ticker, "buy_below"] = ns["price"]
+            wl.loc[wl["ticker"] == ticker, "note"] = (f"Analys {pd.Timestamp.today():%Y-%m-%d}: {d['verdict']} "
+                                                      f"({d['total']:.0f}/100)")
             db.save_watchlist(wl)
             st.toast("Tillagd i bevakningslistan med köplarm", icon="👀")
-        if y.button("🐺 Fråga Vargen om aktien", use_container_width=True, key=f"g_varg_{ticker}"):
+        if z.button("🐺 Fråga Vargen om aktien", use_container_width=True, key=f"g_varg_{ticker}"):
             st.session_state["vargen_pending"] = (f"Vad tycker du om {c['name'] or ticker} ({ticker})? "
                                                   f"Min analysguide säger {d['verdict']} ({d['total']:.0f}/100).")
             st.switch_page(st.session_state["_pages"]["vargen"])
-        if z.button("🛒 Registrera köp", use_container_width=True, key=f"g_buy_{ticker}"):
-            st.switch_page(st.session_state["_pages"]["transaktioner"])
         st.caption("Guiden bygger på vanliga tumregler och data från Yahoo Finance, som kan vara ofullständig. "
                    "Det är inte finansiell rådgivning – gör alltid din egen bedömning.")
