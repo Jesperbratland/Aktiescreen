@@ -52,14 +52,57 @@ def fmt_big(x) -> str:
 
 
 CSS = """
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ---------- iOS-stil ---------- */
+html, body, .stApp {-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+                    font-feature-settings: "cv11", "ss01", "ss03";}
+h1 {letter-spacing: -0.022em !important; font-weight: 700 !important;}
+h2, h3 {letter-spacing: -0.015em !important;}
+[data-testid="stCaptionContainer"], .small-muted {letter-spacing: -0.005em;}
+
+/* Sidomeny som iOS-sidopanel */
+[data-testid="stSidebar"] {background: #0F201B;}
+[data-testid="stSidebarNavLink"] {border-radius: 10px; padding: 0.35rem 0.7rem; margin: 1px 0.25rem;
+                                   transition: background .15s ease;}
+[data-testid="stSidebarNavLink"][aria-current="page"] {background: rgba(232,180,76,0.14);}
+[data-testid="stSidebarNavLink"][aria-current="page"] span {color: #E8B44C; font-weight: 600;}
+[data-testid="stSidebarNavSeparator"] {display: none;}
+[data-testid="stNavSectionHeader"] {text-transform: uppercase; font-size: 0.72rem !important;
+                                     letter-spacing: 0.06em; color: #8A9A93 !important; font-weight: 600;}
+
+/* Flikar som iOS segmented control */
+[data-baseweb="tab-list"] {background: rgba(118,118,128,0.20); border-radius: 10px; padding: 3px;
+                           gap: 2px !important; width: fit-content; max-width: 100%;}
+[data-baseweb="tab-list"] button[role="tab"] {border-radius: 8px; padding: 0.3rem 0.9rem !important;
+                                              margin: 0 !important; transition: background .2s ease;}
+[data-baseweb="tab-list"] button[role="tab"][aria-selected="true"] {background: rgba(244,239,230,0.14);
+                                              box-shadow: 0 1px 4px rgba(0,0,0,0.25);}
+[data-baseweb="tab-list"] button[role="tab"] p {font-weight: 500;}
+[data-baseweb="tab-highlight"], [data-baseweb="tab-border"] {display: none !important;}
+
+/* Grupperade rutor (inset grouped) */
+[data-testid="stVerticalBlockBorderWrapper"] {border-radius: 18px !important;}
+[data-testid="stExpander"] details {border-radius: 14px !important; border: none !important;
+                                    background: #142721;}
+[data-testid="stExpander"] summary {padding: 0.75rem 1rem;}
+[data-testid="stAlert"] {border-radius: 14px;}
+[data-testid="stDataFrame"], [data-testid="stDataEditor"] {border-radius: 14px; overflow: hidden;}
+
+/* Knappar och fält */
+.stButton button, .stDownloadButton button, .stFormSubmitButton button {font-weight: 600;
+                   transition: transform .08s ease, opacity .15s ease;}
+.stButton button:active, .stDownloadButton button:active, .stFormSubmitButton button:active {transform: scale(0.97);}
+[data-baseweb="input"], [data-baseweb="select"] > div, [data-baseweb="textarea"] {background: rgba(118,118,128,0.18) !important;}
+
 .block-container {padding-top: 1.6rem; padding-bottom: 2rem; max-width: 1500px;}
 [data-testid="stMetric"] {
-    background: #142721; border: 1px solid #2A3F36; border-radius: 12px;
+    background: #142721; border: none; border-radius: 16px;
     padding: 14px 16px;
 }
 [data-testid="stMetricLabel"] p {font-size: 0.82rem; color: #A8B5AE;}
 [data-testid="stMetricValue"] {font-size: 1.45rem; font-weight: 650;}
-.signal {border-radius: 10px; padding: 10px 14px; margin-bottom: 8px;
+.signal {border-radius: 14px; padding: 10px 14px; margin-bottom: 8px;
          border-left: 4px solid; background: #142721;}
 .signal.pos {border-color: #22C55E;}
 .signal.neg {border-color: #EF4444;}
