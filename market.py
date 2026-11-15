@@ -132,8 +132,27 @@ def get_quotes(tickers: tuple[str, ...]) -> pd.DataFrame:
 PRICE_SOURCES = ["Avanza (realtid, nordiska aktier)", "Yahoo Finance (ca 15 min fördröjning)"]
 
 
+def price_source() -> str:
+    """Vald kurskälla (sparas i databasen, standard Yahoo)."""
+    v = st.session_state.get("price_source_val")
+    if v is None:
+        try:
+            import db
+            v = db.get_setting("price_source", PRICE_SOURCES[1])
+        except Exception:
+            v = PRICE_SOURCES[1]
+        st.session_state["price_source_val"] = v
+    return v if v in PRICE_SOURCES else PRICE_SOURCES[1]
+
+
+def set_price_source(v: str) -> None:
+    import db
+    db.set_setting("price_source", v)
+    st.session_state["price_source_val"] = v
+
+
 def use_avanza() -> bool:
-    return st.session_state.get("price_source", PRICE_SOURCES[0]) == PRICE_SOURCES[0]
+    return price_source() == PRICE_SOURCES[0]
 
 
 def get_live_quotes(tickers: tuple[str, ...]) -> pd.DataFrame:

@@ -5,7 +5,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-import charts, db, mal, market, portfolio
+import aktielista, charts, db, mal, market, portfolio, ui_helpers
 from ui import ACCENT, NEG, POS, fmt_pct, fmt_sek
 
 
@@ -112,6 +112,7 @@ def render():
     tx = db.load_transactions()
     if tx.empty:
         st.title("📊 Portföljöversikt")
+        ui_helpers.onboarding(tx)
         st.info("Du har inga aktier inlagda ännu.")
         a, b, _ = st.columns([1, 1, 2])
         if a.button("➕ Lägg in mina aktier", type="primary", use_container_width=True):
@@ -149,7 +150,9 @@ def render():
 
     with st.spinner("Räknar på historiken…"):
         hist = _compute_history(tx)
+    ui_helpers.onboarding(tx)
     _hero(value, cash, day, prev_value, total, hist)
+    ui_helpers.quick_actions()
     try:
         import sida_bevakning
         hits = sida_bevakning.alerts()
@@ -230,30 +233,35 @@ def render():
 
         st.subheader("Innehav")
         table = hold.assign(
+            name=hold["ticker"].map(lambda t: aktielista.POPULAR.get(t, t)),
             unrealized_pct=hold["unrealized_pct"] * 100,
             day_change_pct=hold["day_change_pct"] * 100,
             weight=hold["weight"] * 100,
-        )[["ticker", "qty", "gav_local", "price", "currency", "day_change_pct", "value_sek",
+            value_sek=hold["value_sek"].round(0), cost_sek=hold["cost_sek"].round(0),
+            unrealized_sek=hold["unrealized_sek"].round(0), dividends_sek=hold["dividends_sek"].round(0),
+        )[["name", "ticker", "qty", "gav_local", "price", "currency", "day_change_pct", "value_sek",
            "cost_sek", "unrealized_sek", "unrealized_pct", "dividends_sek", "weight"]]
         st.dataframe(
             table, hide_index=True, use_container_width=True,
             column_config={
+                "name": st.column_config.TextColumn("Aktie", pinned=True),
                 "ticker": "Ticker",
-                "qty": st.column_config.NumberColumn("Antal", format="%.0f"),
+                "qty": st.column_config.NumberColumn("Antal", format="%g"),
                 "gav_local": st.column_config.NumberColumn("GAV", format="%.2f", help="Genomsnittligt anskaffningsvärde i aktiens valuta"),
                 "price": st.column_config.NumberColumn("Kurs", format="%.2f"),
                 "currency": "Valuta",
                 "day_change_pct": st.column_config.NumberColumn("Idag", format="%.2f %%"),
-                "value_sek": st.column_config.NumberColumn("Värde (SEK)", format="%.0f"),
-                "cost_sek": st.column_config.NumberColumn("Anskaffning (SEK)", format="%.0f"),
-                "unrealized_sek": st.column_config.NumberColumn("Orealiserat (SEK)", format="%.0f"),
+                "value_sek": st.column_config.NumberColumn("Värde (SEK)", format="localized"),
+                "cost_sek": st.column_config.NumberColumn("Anskaffning (SEK)", format="localized"),
+                "unrealized_sek": st.column_config.NumberColumn("Orealiserat (SEK)", format="localized"),
                 "unrealized_pct": st.column_config.NumberColumn("Orealiserat %", format="%.1f %%"),
-                "dividends_sek": st.column_config.NumberColumn("Utdelning (SEK)", format="%.0f"),
+                "dividends_sek": st.column_config.NumberColumn("Utdelning (SEK)", format="localized"),
                 "weight": st.column_config.ProgressColumn("Vikt", format="%.1f %%", min_value=0, max_value=100),
             },
         )
 
     _history_section(tx, hist)
+    ui_helpers.glossary()
 
 
 def _history_section(tx: pd.DataFrame, hist: pd.DataFrame):

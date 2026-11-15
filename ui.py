@@ -89,6 +89,16 @@ h2, h3 {letter-spacing: -0.015em !important;}
 [data-testid="stAlert"] {border-radius: 14px;}
 [data-testid="stDataFrame"], [data-testid="stDataEditor"] {border-radius: 14px; overflow: hidden;}
 
+/* Mobil: mindre luft och rubriker, kort på full bredd */
+@media (max-width: 640px) {
+  .block-container {padding-left: 0.8rem !important; padding-right: 0.8rem !important; padding-top: 1rem !important;}
+  h1 {font-size: 1.75rem !important;}
+  .hero-value {font-size: 2.1rem !important;}
+  .pill {min-width: 100% !important;}
+  [data-baseweb="tab-list"] {overflow-x: auto; width: 100%;}
+  [data-testid="stMetric"] {padding: 10px 12px;}
+}
+
 /* Knappar och fält */
 .stButton button, .stDownloadButton button, .stFormSubmitButton button {font-weight: 600;
                    transition: transform .08s ease, opacity .15s ease;}

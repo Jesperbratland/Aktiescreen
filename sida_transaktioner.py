@@ -44,8 +44,9 @@ def _add_form():
         type_ = c[3].selectbox("Typ", db.TYPES)
         currency = c[4].selectbox("Valuta", db.CURRENCIES)
         c = st.columns(4)
-        qty = c[0].number_input("Antal", min_value=0.0, step=1.0, format="%.4f")
-        price = c[1].number_input("Kurs / utdelning per aktie", min_value=0.0, step=0.01, format="%.4f")
+        qty = c[0].number_input("Antal", min_value=0.0, step=1.0, format="%g")
+        price = c[1].number_input("Kurs / utdelning per aktie", min_value=0.0, step=0.01, format="%.2f",
+                                help="Kursen du köpte/sålde för, i aktiens valuta. Vid utdelning: utdelning per aktie.")
         fee = c[2].number_input("Courtage / källskatt (SEK)", min_value=0.0, step=1.0,
                                 help="Lämnas 0 och 'Räkna courtage automatiskt' är ikryssat räknas det ut från kontots courtageklass.")
         fx = c[3].number_input("Valutakurs (SEK)", min_value=0.0, step=0.0001, format="%.4f",

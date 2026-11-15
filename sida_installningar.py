@@ -7,6 +7,7 @@ import json
 import streamlit as st
 
 import db
+import market
 
 
 def render():
@@ -51,6 +52,26 @@ säkerhetskopian nedan.
     else:
         st.caption("Databasen hos Neon somnar efter 5 minuter utan användning och vaknar automatiskt när du "
                    "öppnar appen – första sidladdningen kan ta en extra sekund.")
+
+    st.divider()
+    st.subheader("📈 Kurser")
+    cur = market.price_source()
+    choice = st.radio("Kurskälla för aktuella kurser", market.PRICE_SOURCES,
+                      index=market.PRICE_SOURCES.index(cur), key="ps_radio")
+    if choice != cur:
+        market.set_price_source(choice)
+        st.cache_data.clear()
+        st.rerun()
+    if market.use_avanza():
+        hits = st.session_state.get("avanza_hits")
+        if hits and hits[1]:
+            ok, total = hits
+            (st.success if ok == total else st.warning)(
+                f"Avanza-kurs för {ok} av {total} nordiska aktier" + ("" if ok == total else " – övriga från Yahoo."))
+        st.caption("Avanza svarar inte alltid på anrop från Streamlits servrar. Då används Yahoo automatiskt.")
+    else:
+        st.caption("Yahoo Finance: kurser med ca 15 minuters fördröjning under börsdagen. Historik och nyckeltal "
+                   "kommer alltid från Yahoo.")
 
     st.divider()
     st.subheader("🗂️ Säkerhetskopia")

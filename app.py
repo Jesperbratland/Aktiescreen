@@ -10,7 +10,8 @@ st.set_page_config(page_title="Aktiescreen", page_icon="🎄", layout="wide",
 import auth  # noqa: E402
 import db  # noqa: E402
 import charts  # noqa: E402,F401  (registrerar diagramstilen)
-import market  # noqa: E402
+import market  # noqa: E402,F401
+import ui_helpers  # noqa: E402
 from ui import JULTEMA, christmas_greeting, inject_christmas, inject_css  # noqa: E402
 import sida_analys as stock_analysis  # noqa: E402
 import sida_bevakning as bevakning  # noqa: E402
@@ -54,22 +55,20 @@ nav = st.navigation({
 with st.sidebar:
     st.markdown("### 🎄 Aktiescreen" if JULTEMA else "### 📈 Aktiescreen")
     christmas_greeting()
-    if st.button("🔄 Uppdatera kurser", use_container_width=True):
+    ui_helpers.global_search()
+    if st.button("🔄 Uppdatera kurser", use_container_width=True,
+                 help="Kurser hämtas automatiskt var 5:e minut. Klicka för att hämta direkt."):
         st.cache_data.clear()
-        st.rerun()
-    st.selectbox("Kurskälla", market.PRICE_SOURCES, key="price_source",
-                 help="Avanza ger samma kurser som i Avanza-appen (realtid) för nordiska aktier. "
-                      "Svarar inte Avanza används Yahoo automatiskt.")
-    if hits := st.session_state.get("avanza_hits"):
-        ok, total = hits
-        if total and market.use_avanza():
-            st.caption(f"{'✅' if ok == total else '⚠️'} Avanza-kurs för {ok} av {total} nordiska aktier"
-                       + ("" if ok == total else " – övriga från Yahoo"))
+        st.toast("Kurserna är uppdaterade", icon="🔄")
     if JULTEMA:
         st.toggle("❄️ Snöfall", value=True, key="snow")
     if not db.is_cloud():
         st.caption("⚠️ Data sparas tillfälligt. Se **⚙️ Inställningar** för permanent lagring.")
-    st.caption("Historik och nyckeltal från Yahoo Finance.")
     auth.logout_button()
 
-nav.run()
+try:
+    nav.run()
+except Exception as e:  # Streamlits egna styrsignaler (rerun/stop/switch_page) är inte Exception
+    if type(e).__module__.startswith("streamlit.runtime"):
+        raise
+    ui_helpers.friendly_error(e)
