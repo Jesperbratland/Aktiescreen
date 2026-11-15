@@ -67,17 +67,27 @@ CSS = """
 .signal b {display: block; margin-bottom: 2px;}
 .small-muted {color: #A8B5AE; font-size: 0.85rem;}
 /* Sammanfattning överst på Översikten */
-.hero-top {color: #A8B5AE; font-size: .9rem; margin-bottom: .6rem;}
-.hero-label {color: #A8B5AE; font-size: .85rem; text-transform: uppercase; letter-spacing: .08em;}
-.hero-value {font-size: 2.6rem; font-weight: 700; line-height: 1.15; margin: .1rem 0 .2rem;}
-.hero-sub {color: #A8B5AE; font-size: .9rem; margin-bottom: 1rem;}
-.hero-pills {display: flex; gap: .7rem; flex-wrap: wrap;}
-.pill {background: #1B332B; border: 1px solid #2A3F36; border-radius: 12px; padding: .55rem .9rem; min-width: 150px;}
-.pill span {display: block; color: #A8B5AE; font-size: .78rem;}
-.pill b {display: block; font-size: 1.15rem;}
-.pill small {font-size: .85rem;}
-.pill.pos b, .pill.pos small {color: #22C55E;}
-.pill.neg b, .pill.neg small {color: #EF4444;}
+[data-testid="stVerticalBlockBorderWrapper"] {border-radius: 20px !important;}
+.hero-top {color: #A8B5AE; font-size: .9rem; margin-bottom: .7rem;}
+.hero-label {color: #A8B5AE; font-size: .8rem; text-transform: uppercase; letter-spacing: .1em;}
+.hero-value {font-size: 2.7rem; font-weight: 700; line-height: 1.15; margin: .15rem 0 .25rem;}
+.hero-sub {color: #A8B5AE; font-size: .9rem; margin-bottom: 1.1rem;}
+.hero-pills {display: flex; gap: .8rem; flex-wrap: wrap;}
+.pill {flex: 1; min-width: 140px; border-radius: 18px; padding: .9rem 1.1rem;
+       background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.06);
+       box-shadow: 0 6px 18px rgba(0,0,0,.18); transition: transform .15s ease;}
+.pill:hover {transform: translateY(-2px);}
+.pill span {display: block; color: #A8B5AE; font-size: .8rem; margin-bottom: .25rem;}
+.pill b {display: block; font-size: 1.25rem; font-weight: 650; color: #F4EFE6;}
+.pill small {display: inline-block; margin-top: .35rem; padding: .1rem .55rem; border-radius: 999px;
+             font-size: .8rem; font-weight: 600; background: rgba(255,255,255,.07); color: #A8B5AE;}
+.pill.pos {background: linear-gradient(135deg, rgba(74,222,128,.16), rgba(74,222,128,.04));
+           border-color: rgba(74,222,128,.18);}
+.pill.neg {background: linear-gradient(135deg, rgba(248,113,113,.16), rgba(248,113,113,.04));
+           border-color: rgba(248,113,113,.18);}
+.pill.pos b {color: #4ADE80;} .pill.neg b {color: #F87171;}
+.pill.pos small {background: rgba(74,222,128,.15); color: #4ADE80;}
+.pill.neg small {background: rgba(248,113,113,.15); color: #F87171;}
 """
 
 

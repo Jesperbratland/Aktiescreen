@@ -48,14 +48,25 @@ def _greeting() -> str:
 def _pill(label: str, kr: float, pct: float | None) -> str:
     tone = "pos" if kr > 0.5 else "neg" if kr < -0.5 else ""
     kr_txt = ("+" if kr > 0.5 else "") + fmt_sek(kr)
-    pct_txt = fmt_pct(pct, 1) if pct is not None and pct == pct else "&nbsp;"
+    if pct is not None and pct == pct:
+        arrow = "▲" if pct > 0 else "▼" if pct < 0 else "●"
+        pct_txt = f"{arrow} {fmt_pct(abs(pct), 1, sign=False)}"
+    else:
+        pct_txt = "–"
     return f'<div class="pill {tone}"><span>{label}</span><b>{kr_txt}</b><small>{pct_txt}</small></div>'
 
 
 def _hero(value: float, cash: float, day: float, prev_value: float, total: float, hist: pd.DataFrame):
     today = pd.Timestamp.today().normalize()
-    ytd_kr = ytd_pct = start_pct = None
+    ytd_kr = ytd_pct = week_kr = week_pct = None
     if not hist.empty:
+        wk = today - pd.Timedelta(days=7)
+        wb = hist[hist.index <= wk]
+        if not wb.empty:
+            after = hist[hist.index > wk]
+            week_kr = value - float(wb["value"].iloc[-1]) - float(after["cashflow"].sum()) + \
+                float(hist["dividends"].iloc[-1] - wb["dividends"].iloc[-1])
+            week_pct = float(hist["twr_index"].iloc[-1]) / float(wb["twr_index"].iloc[-1]) - 1
         soy = pd.Timestamp(year=today.year, month=1, day=1)
         before = hist[hist.index < soy]
         base_val = float(before["value"].iloc[-1]) if not before.empty else 0.0
@@ -65,7 +76,6 @@ def _hero(value: float, cash: float, day: float, prev_value: float, total: float
             float(in_year["dividends"].iloc[-1] - (before["dividends"].iloc[-1] if not before.empty else 0.0)) \
             if not in_year.empty else 0.0
         ytd_pct = float(hist["twr_index"].iloc[-1]) / base_twr - 1
-        start_pct = float(hist["twr_index"].iloc[-1]) / 100 - 1
 
     with st.container(border=True):
         left, right = st.columns([1.45, 1])
@@ -76,9 +86,9 @@ def _hero(value: float, cash: float, day: float, prev_value: float, total: float
                 f'<div class="hero-value">{fmt_sek(value + cash)}</div>'
                 f'<div class="hero-sub">Aktier {fmt_sek(value)} · 💰 Tillgängligt för köp {fmt_sek(cash)}</div>'
                 f'<div class="hero-pills">'
-                f'{_pill("Idag", day, day / prev_value if prev_value else None)}'
-                f'{_pill(f"I år ({today.year})", ytd_kr if ytd_kr is not None else 0.0, ytd_pct)}'
-                f'{_pill("Sedan start", total, start_pct)}'
+                f'{_pill("☀️ Idag", day, day / prev_value if prev_value else None)}'
+                f'{_pill("📅 Senaste veckan", week_kr if week_kr is not None else 0.0, week_pct)}'
+                f'{_pill("🗓️ I år", ytd_kr if ytd_kr is not None else 0.0, ytd_pct)}'
                 f'</div>', unsafe_allow_html=True)
         with right:
             if not hist.empty:
