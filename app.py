@@ -15,6 +15,7 @@ import ui_helpers  # noqa: E402
 from ui import JULTEMA, christmas_greeting, inject_christmas, inject_css  # noqa: E402
 import sida_analys as stock_analysis  # noqa: E402
 import sida_bevakning as bevakning  # noqa: E402
+import sida_handelser as handelser_page  # noqa: E402
 import sida_installningar as installningar  # noqa: E402
 import sida_konton as konton  # noqa: E402
 import sida_malkalkyl as malkalkyl  # noqa: E402
@@ -38,6 +39,7 @@ pages = {
     "skatt": st.Page(skatt.render, title="Skatt & avgifter", icon="🧮", url_path="skatt"),
     "mal": st.Page(malkalkyl.render, title="Mål & sparkalkyl", icon="🎯", url_path="mal"),
     "bevakning": st.Page(bevakning.render, title="Bevakningslista", icon="👀", url_path="bevakning"),
+    "handelser": st.Page(handelser_page.render, title="Kalender & nyheter", icon="📅", url_path="kalender"),
     "analys": st.Page(stock_analysis.render, title="Aktieanalys", icon="🔬", url_path="analys"),
     "screener": st.Page(screener_page.render, title="Screener", icon="🧭", url_path="screener"),
     "tips": st.Page(tips.render, title="Tips & insikter", icon="💡", url_path="tips"),
@@ -49,7 +51,7 @@ st.session_state["_pages"] = pages
 nav = st.navigation({
     "AI-expert": [pages["vargen"]],
     "Portfölj": [pages["oversikt"], pages["utvardering"], pages["konton"], pages["transaktioner"], pages["skatt"]],
-    "Analys": [pages["bevakning"], pages["analys"], pages["screener"], pages["tips"]],
+    "Analys": [pages["bevakning"], pages["handelser"], pages["analys"], pages["screener"], pages["tips"]],
     "Mål": [pages["mal"]],
     "Övrigt": [pages["installningar"]],
 })

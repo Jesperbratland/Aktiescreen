@@ -197,6 +197,32 @@ def render():
         with st.expander("Om bolaget"):
             st.write(summary)
 
+    # ---------- Nyheter, insyn och kalender ----------
+    import handelser as h
+    import sida_handelser
+    st.subheader("Senaste om bolaget")
+    n1, n2, n3 = st.tabs(["📰 Nyheter", "🕵️ Insynshandel", "📅 Kalender"])
+    with n1:
+        with st.spinner("Hämtar nyheter …"):
+            sida_handelser.news_list(h.news(ticker, limit=8))
+    with n2:
+        with st.spinner("Hämtar insynshandel …"):
+            sida_handelser.insider_view(ticker, compact=True)
+    with n3:
+        cal = h.calendar(ticker)
+        c = st.columns(3)
+        nxt = next((d for d in cal["earnings"] if d >= h.dt.date.today()), None)
+        c[0].metric("Nästa rapport", h.fmt_date(nxt), h.days_text(nxt) or None, delta_color="off")
+        c[1].metric("X-dag", h.fmt_date(cal["ex_div"]), h.days_text(cal["ex_div"]) or None, delta_color="off")
+        c[2].metric("Utbetalning", h.fmt_date(cal["div_pay"]), h.days_text(cal["div_pay"]) or None, delta_color="off")
+        hist_div = h.dividend_history(ticker)
+        if not hist_div.empty:
+            yearly = hist_div.groupby(hist_div.index.year).sum().tail(10)
+            figd = go.Figure(go.Bar(x=[str(y) for y in yearly.index], y=yearly.values, marker_color=charts.ACCENT,
+                                    width=0.6, hovertemplate="%{x}: %{y:.2f} " + cur + "<extra></extra>"))
+            figd.update_layout(hovermode="closest", title="Utdelning per aktie och år", xaxis=dict(showgrid=False))
+            charts.show(figd, height=240)
+
     # ---------- Jämförelse ----------
     st.subheader("Jämför utveckling")
     others = st.multiselect("Lägg till tickers/index", options=sorted(set(held) | set(market.BENCHMARKS.values())),

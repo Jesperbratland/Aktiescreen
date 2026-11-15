@@ -108,6 +108,25 @@ def _hero(value: float, cash: float, day: float, prev_value: float, total: float
     st.write("")
 
 
+def _next_events(hold: pd.DataFrame) -> None:
+    """Diskret rad med de närmaste rapporterna/utdelningarna."""
+    if hold.empty:
+        return
+    try:
+        import handelser as h
+        ev = h.upcoming_events(list(hold["ticker"]), days=45)
+    except Exception:
+        return
+    if ev.empty:
+        return
+    items = [f"**{r.name}** {r.kind.split(' (')[0].lower()} {r.date.day} {h.MONTHS[r.date.month - 1]}"
+             for r in ev.head(3).itertuples()]
+    a, b = st.columns([6, 1])
+    a.caption("📅 På gång: " + " · ".join(items))
+    if b.button("Kalender", key="ov_cal", use_container_width=True):
+        st.switch_page(st.session_state["_pages"]["handelser"])
+
+
 def render():
     tx = db.load_transactions()
     if tx.empty:
@@ -153,6 +172,7 @@ def render():
     ui_helpers.onboarding(tx)
     _hero(value, cash, day, prev_value, total, hist)
     ui_helpers.quick_actions()
+    _next_events(hold)
     if not hold.empty:
         import sida_utvardering
         with st.spinner("Sätter betyg på portföljen …"):
