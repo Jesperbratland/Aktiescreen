@@ -153,6 +153,10 @@ def render():
     ui_helpers.onboarding(tx)
     _hero(value, cash, day, prev_value, total, hist)
     ui_helpers.quick_actions()
+    if not hold.empty:
+        import sida_utvardering
+        with st.spinner("Sätter betyg på portföljen …"):
+            sida_utvardering.overview_card(tx, hold, cash)
     try:
         import sida_bevakning
         hits = sida_bevakning.alerts()

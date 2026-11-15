@@ -24,6 +24,7 @@ import sida_oversikt as overview  # noqa: E402
 import sida_screener as screener_page  # noqa: E402
 import sida_tips as tips  # noqa: E402
 import sida_transaktioner as transactions  # noqa: E402
+import sida_utvardering as utvardering  # noqa: E402
 
 inject_css()
 inject_christmas(snow=st.session_state.get("snow", True))
@@ -31,6 +32,7 @@ auth.require_login()  # stoppar här tills rätt lösenord har angetts
 
 pages = {
     "oversikt": st.Page(overview.render, title="Översikt", icon="📊", url_path="oversikt", default=True),
+    "utvardering": st.Page(utvardering.render, title="Portföljbetyg", icon="🏅", url_path="betyg"),
     "konton": st.Page(konton.render, title="Mitt innehav", icon="➕", url_path="konton"),
     "transaktioner": st.Page(transactions.render, title="Transaktioner", icon="🧾", url_path="transaktioner"),
     "skatt": st.Page(skatt.render, title="Skatt & avgifter", icon="🧮", url_path="skatt"),
@@ -46,7 +48,7 @@ st.session_state["_pages"] = pages
 
 nav = st.navigation({
     "AI-expert": [pages["vargen"]],
-    "Portfölj": [pages["oversikt"], pages["konton"], pages["transaktioner"], pages["skatt"]],
+    "Portfölj": [pages["oversikt"], pages["utvardering"], pages["konton"], pages["transaktioner"], pages["skatt"]],
     "Analys": [pages["bevakning"], pages["analys"], pages["screener"], pages["tips"]],
     "Mål": [pages["mal"]],
     "Övrigt": [pages["installningar"]],
