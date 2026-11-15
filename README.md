@@ -28,6 +28,10 @@ Appen öppnas på http://localhost:8501. Klicka **Ladda exempelportfölj** på �
 | **Mål & sparkalkyl** | Hur mycket behöver du spara per månad för att nå ett belopp? Diagram med troligt, dåligt och bra utfall (Monte Carlo) samt bara insatta pengar, och chansen att nå målet. |
 | **Tips & insikter** | Portföljhälsa (koncentration, sektor, valuta, stora förlorare/vinnare), tekniska signaler på dina innehav och aktieidéer enligt fyra strategier. |
 
+## Lagring
+
+Utan inställning sparas allt i `data/portfolio.db` (töms vid omstart på Streamlit Cloud). Lägg `DATABASE_URL` (gratis Postgres hos Neon) i Streamlit Secrets för permanent lagring – befintlig data flyttas över automatiskt. Under **⚙️ Inställningar** finns guide och säkerhetskopia (JSON).
+
 ## Inloggning
 
 Sätt `APP_PASSWORD` i Streamlit Secrets så måste lösenordet skrivas in varje gång hemsidan öppnas. 5 fel inom 15 minuter ger en paus, 20 fel inom ett dygn låser i 24 timmar (Reboot app låser upp). Se `auth.py`.

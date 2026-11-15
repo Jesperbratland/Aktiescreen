@@ -8,11 +8,13 @@ st.set_page_config(page_title="Aktiescreen", page_icon="🎄", layout="wide",
                    initial_sidebar_state="expanded")
 
 import auth  # noqa: E402
+import db  # noqa: E402
 import charts  # noqa: E402,F401  (registrerar diagramstilen)
 import market  # noqa: E402
 from ui import JULTEMA, christmas_greeting, inject_christmas, inject_css  # noqa: E402
 import sida_analys as stock_analysis  # noqa: E402
 import sida_bevakning as bevakning  # noqa: E402
+import sida_installningar as installningar  # noqa: E402
 import sida_konton as konton  # noqa: E402
 import sida_malkalkyl as malkalkyl  # noqa: E402
 import sida_skatt as skatt  # noqa: E402
@@ -37,6 +39,7 @@ pages = {
     "screener": st.Page(screener_page.render, title="Screener", icon="🧭", url_path="screener"),
     "tips": st.Page(tips.render, title="Tips & insikter", icon="💡", url_path="tips"),
     "vargen": st.Page(vargen.render, title="Fråga Vargen", icon="🐺", url_path="vargen"),
+    "installningar": st.Page(installningar.render, title="Inställningar", icon="⚙️", url_path="installningar"),
 }
 st.session_state["_pages"] = pages
 
@@ -45,6 +48,7 @@ nav = st.navigation({
     "Portfölj": [pages["oversikt"], pages["konton"], pages["transaktioner"], pages["skatt"]],
     "Analys": [pages["bevakning"], pages["analys"], pages["screener"], pages["tips"]],
     "Mål": [pages["mal"]],
+    "Övrigt": [pages["installningar"]],
 })
 
 with st.sidebar:
@@ -63,7 +67,9 @@ with st.sidebar:
                        + ("" if ok == total else " – övriga från Yahoo"))
     if JULTEMA:
         st.toggle("❄️ Snöfall", value=True, key="snow")
-    st.caption("Historik och nyckeltal från Yahoo Finance. Data lagras i data/portfolio.db.")
+    if not db.is_cloud():
+        st.caption("⚠️ Data sparas tillfälligt. Se **⚙️ Inställningar** för permanent lagring.")
+    st.caption("Historik och nyckeltal från Yahoo Finance.")
     auth.logout_button()
 
 nav.run()
